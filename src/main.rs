@@ -254,7 +254,10 @@ const BUNDLED_AMPR_VERSION: &str = include_str!("../vendor/ampr-emu-ng/VERSION")
 /// `<version> <len> <crc32>` of the copy we last wrote (bundled or downloaded); v0.4.0 wrote
 /// `<len> <crc32>` (version unknown). Outside AMPR_DIR: every file there goes into fakelib/.
 const BUNDLED_MARK: &str = "/data/krakenmount/ampr.bundled";
-const AMPR_RELEASE_URL: &str = "https://api.github.com/repos/quer3q/ampr-emu-ng/releases/latest";
+/// The releases/latest API URL of setting `ampr_update_repo` (owner/repo, checked by config.rs).
+fn ampr_release_url(s: &Settings) -> String {
+    format!("https://api.github.com/repos/{}/releases/latest", s.ampr_update_repo)
+}
 const AMPR_ASSET: &str = "libSceAmpr.sprx";
 
 fn mark_format(version: &str, len: usize, crc: u32) -> String {
@@ -458,8 +461,9 @@ fn ampr_update(state: &State, force: bool, attempts: u32) -> Result<String, Stri
 
 fn ampr_update_inner(state: &State, force: bool, attempts: u32) -> Result<String, String> {
     let path = format!("{}/{AMPR_ASSET}", cache::AMPR_DIR);
-    let body = get_retry(AMPR_RELEASE_URL, 1 << 20, attempts).map_err(|e| format!("GET {AMPR_RELEASE_URL}: {e}"))?;
-    let rel = parse_release(&body).map_err(|e| format!("{AMPR_RELEASE_URL}: {e}"))?;
+    let url = ampr_release_url(&state.settings.lock().unwrap().clone());
+    let body = get_retry(&url, 1 << 20, attempts).map_err(|e| format!("GET {url}: {e}"))?;
+    let rel = parse_release(&body).map_err(|e| format!("{url}: {e}"))?;
     let mark = std::fs::read_to_string(BUNDLED_MARK).ok();
     let (inst, _) = read_installed(&path, mark.as_deref()).map_err(|e| format!("read {path}: {e}"))?;
     if !force && !should_update(&inst, &rel.tag) {
@@ -530,6 +534,21 @@ fn prepare_ampr() {
     }
 }
 
+/// Every libSceAmpr.sprx kraken-mount injects (the ampr dir, each per-title dir) checked for ng's pkg
+/// mode at start: one log line and toast per file without it.
+fn check_ampr_pkg_mode(s: &Settings) {
+    let mut dirs = vec![std::path::PathBuf::from(cache::AMPR_DIR)];
+    dirs.extend(std::fs::read_dir(cache::AMPR_TITLES_DIR).into_iter().flatten().flatten().map(|e| e.path()));
+    for dir in dirs {
+        let path = dir.join("libSceAmpr.sprx");
+        let Ok(bytes) = std::fs::read(&path) else { continue };
+        if !cache::sprx_supports_pkg(&bytes) {
+            log!("ampr: WARNING {} has no pkg mode (no kraken.image): pkg games get no packed files from it", path.display());
+            toast(s, &i18n::ampr_no_pkg(i18n::lang(), &path.to_string_lossy()));
+        }
+    }
+}
+
 /// ShadowMountPlus's process name (SMP main.c PAYLOAD_NAME): it registers and mounts the same titles.
 const SMP_PROCESS: &str = "shadowmountplus.elf";
 
@@ -584,6 +603,7 @@ fn main() {
     toast(&s, i18n::started(i18n::lang()));
     install_bundled_ampr();
     prepare_ampr();
+    check_ampr_pkg_mode(&s);
     std::thread::spawn(save_self_copy);
     // ponytail: debug turned on later takes effect at the next start.
     if s.debug {

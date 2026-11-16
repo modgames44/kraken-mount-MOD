@@ -259,3 +259,56 @@ pub fn smp_running(l: Lang) -> &'static str {
         Lang::Ar => "Kraken Mount: ShadowMount+ قيد التشغيل؛ جارٍ انتظار إيقافه",
     }
 }
+
+/// The ampr dir's libSceAmpr.sprx has no pkg mode (an upstream ampr_emu, say): pkg games will start
+/// without their files.
+pub fn ampr_no_pkg(l: Lang, path: &str) -> String {
+    match l {
+        Lang::En => format!("Kraken Mount: {path} has no pkg mode; pkg games will not run with it"),
+        Lang::Ru => format!("Kraken Mount: в {path} нет режима pkg; игры pkg с ним не запустятся"),
+        Lang::Zh => format!("Kraken Mount：{path} 不支持 pkg 模式，pkg 游戏将无法运行"),
+        Lang::De => format!("Kraken Mount: {path} hat keinen pkg-Modus; pkg-Spiele laufen damit nicht"),
+        Lang::Es => format!("Kraken Mount: {path} no tiene modo pkg; los juegos pkg no funcionarán con él"),
+        Lang::Fr => format!("Kraken Mount : {path} n'a pas de mode pkg ; les jeux pkg ne fonctionneront pas"),
+        Lang::Ja => format!("Kraken Mount: {path} には pkg モードがありません。pkg ゲームは動作しません"),
+        Lang::Pt => format!("Kraken Mount: {path} não tem modo pkg; jogos pkg não funcionarão com ele"),
+        Lang::It => format!("Kraken Mount: {path} non ha la modalità pkg; i giochi pkg non funzioneranno"),
+        Lang::Ko => format!("Kraken Mount: {path}에 pkg 모드가 없습니다. pkg 게임이 실행되지 않습니다"),
+        Lang::Ar => format!("Kraken Mount: لا يحتوي {path} على وضع pkg؛ لن تعمل ألعاب pkg معه"),
+    }
+}
+
+/// A launch of one of our titles where ng did not start (no fresh /data/ampr_emu_status.txt):
+/// the game ran with the system libSceAmpr.
+pub fn ng_not_loaded(l: Lang, name: &str) -> String {
+    match l {
+        Lang::En => format!("{name}: ampr-emu-ng did not load; see the log"),
+        Lang::Ru => format!("{name}: ampr-emu-ng не загрузился; см. журнал"),
+        Lang::Zh => format!("{name}：ampr-emu-ng 未加载，请查看日志"),
+        Lang::De => format!("{name}: ampr-emu-ng wurde nicht geladen; siehe Protokoll"),
+        Lang::Es => format!("{name}: ampr-emu-ng no se cargó; consulta el registro"),
+        Lang::Fr => format!("{name}\u{202f}: ampr-emu-ng ne s'est pas chargé ; voir le journal"),
+        Lang::Ja => format!("{name}：ampr-emu-ng が読み込まれませんでした。ログを確認してください"),
+        Lang::Pt => format!("{name}: o ampr-emu-ng não carregou; veja o log"),
+        Lang::It => format!("{name}: ampr-emu-ng non è stato caricato; vedi il log"),
+        Lang::Ko => format!("{name}: ampr-emu-ng가 로드되지 않았습니다. 로그를 확인하세요"),
+        Lang::Ar => format!("{name}: لم يتم تحميل ampr-emu-ng؛ راجع السجل"),
+    }
+}
+
+/// ng loaded but reported a problem (hooks that did not install, an index it could not load).
+pub fn ng_problem(l: Lang, name: &str, what: &str) -> String {
+    match l {
+        Lang::En => format!("{name}: ampr-emu-ng: {what}"),
+        Lang::Ru => format!("{name}: ampr-emu-ng: {what}"),
+        Lang::Zh => format!("{name}：ampr-emu-ng：{what}"),
+        Lang::De => format!("{name}: ampr-emu-ng: {what}"),
+        Lang::Es => format!("{name}: ampr-emu-ng: {what}"),
+        Lang::Fr => format!("{name}\u{202f}: ampr-emu-ng : {what}"),
+        Lang::Ja => format!("{name}：ampr-emu-ng：{what}"),
+        Lang::Pt => format!("{name}: ampr-emu-ng: {what}"),
+        Lang::It => format!("{name}: ampr-emu-ng: {what}"),
+        Lang::Ko => format!("{name}: ampr-emu-ng: {what}"),
+        Lang::Ar => format!("{name}: ampr-emu-ng: {what}"),
+    }
+}

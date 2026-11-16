@@ -41,6 +41,18 @@ const APP0: &str = "/app0/";
 const PKG_NAME: &str = "kraken.pkg";
 const INDEX_NAME: &str = "ampr_emu.index";
 const MANIFEST_NAME: &str = "ampr_assets.index";
+/// ng's optional runtime profile next to the manifest (AMPRCFG1, `load_runtime_profile` in
+/// ampr-sys rt/pack/manifest.rs). An invalid one makes ng refuse the whole manifest, so its
+/// layout is checked by `profile_matches_ng_rules` below.
+const PROFILE_NAME: &str = "ampr_assets.index.runtime";
+const PROFILE_SIZE: usize = 64;
+/// ng's default decoded cache (AMPR_EMU_PACK_DECODED_CACHE_BYTES), kept as is.
+const PROFILE_DECODED_BYTES: u64 = 64 << 20;
+/// 4 workers as ng's default for bulk reads plus 1 kept for reads of at most 64 KiB (ng
+/// `latency_reserve_workers`): an audio or video stream's small read no longer waits for a
+/// worker busy with level data. ng fits 5 workers and 11 pipelines in its Buffer ledger.
+const PROFILE_WORKERS: u32 = 5;
+const PROFILE_LATENCY_RESERVE: u32 = 1;
 
 // AMPRIDX3 (ampr-format index.rs, dump-forge's ampr_index.rs).
 const IDX_MAGIC: &[u8; 8] = b"AMPRIDX3";
@@ -60,6 +72,9 @@ const PAK_HEADER_CRC_AT: usize = 116;
 const ENDIAN_MARKER: u32 = 0x0102_0304;
 const FILE_PACKED: u32 = 1;
 const FILE_STREAMING: u32 = 4;
+/// ng `AMPR_PACK_FILE_HOT`: admitted to the decoded cache on first touch, reads under 256 KiB in
+/// the latency class, and (ng's default AMPR_PACK_READAHEAD_HOT_ONLY) sequential read-ahead.
+const FILE_HOT: u32 = 8;
 const CHUNK_RAW: u32 = 0;
 /// ng/KRAKEN.md: codec 2, location = offset (40 bits) | even_len << 40 | mode << 59.
 const CHUNK_KRAKEN: u32 = 2;
@@ -194,6 +209,33 @@ fn build_index(rows: &[(String, u64)], mtime: i64) -> Vec<u8> {
     out
 }
 
+/// Audio and video streams: read in small sequential pieces against a deadline (a cutscene, the
+/// music), so they get FILE_HOT. Matched on the lower-case extension.
+const STREAM_EXTS: &[&str] = &[
+    // video: Bink, CRI Sofdec, MP4/MOV family, WebM, AVI, WMV, Matroska
+    "bk2", "bik", "usm", "mp4", "m4v", "mov", "webm", "avi", "wmv", "mkv",
+    // audio: Wwise, FMOD, CRI ADX2, ATRAC9, Ogg/Opus, WAV, generic
+    "wem", "bnk", "pck", "fsb", "bank", "awb", "acb", "at9", "ogg", "opus", "wav", "xma", "mp3",
+];
+
+/// Video containers (already compressed): what `extract_media` copies out of the pkg loose.
+const VIDEO_EXTS: &[&str] = &["bk2", "bik", "usm", "mp4", "m4v", "mov", "webm", "avi", "wmv", "mkv"];
+
+fn ext_in(path: &str, list: &[&str]) -> bool {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    name.rsplit_once('.').is_some_and(|(_, e)| list.iter().any(|x| e.eq_ignore_ascii_case(x)))
+}
+
+/// A file ng should treat as a stream (FILE_HOT).
+pub fn stream_file(path: &str) -> bool {
+    ext_in(path, STREAM_EXTS)
+}
+
+/// A video file the `extract_media` setting keeps loose.
+pub fn video_file(path: &str) -> bool {
+    ext_in(path, VIDEO_EXTS)
+}
+
 /// One packed file's chunk records (location u64, descriptor u32) and file flags.
 struct Plan {
     chunks: Vec<(u64, u32)>,
@@ -258,7 +300,8 @@ fn plan(path: &str, size: u64, blocks: &[Chunk], vol_size: u64) -> Result<Plan> 
         out.push((loc, (stored as u32 - 1) | codec << 20, flags));
     }
     let chunks = out.into_iter().map(|(loc, d, f)| (loc, d | u32::from(f) << 22)).collect();
-    Ok(Plan { chunks, flags: FILE_PACKED, zeros })
+    let flags = FILE_PACKED | if stream_file(path) { FILE_HOT } else { 0 };
+    Ok(Plan { chunks, flags, zeros })
 }
 
 /// Whether `chunks` can be packed as `plan` packs them (the 256 KiB block grid): a file whose
@@ -373,6 +416,24 @@ fn build_manifest(rows: &[(String, &IndexFile)], mtime: i64, pkg_len: u64) -> Re
     Ok((m, zeros))
 }
 
+/// ng's AMPRCFG1 runtime profile for manifest `build_id` (64 bytes): magic, version 1, size,
+/// build id, decoded cache bytes, physical cache bytes (0; ng adds it to the decoded cache),
+/// workers, latency reserve workers, CRC-32 of the 64 bytes with the CRC field zeroed, reserved 0.
+fn runtime_profile(build_id: &[u8]) -> Vec<u8> {
+    let mut v = vec![0u8; PROFILE_SIZE];
+    v[..8].copy_from_slice(b"AMPRCFG1");
+    put32(&mut v, 8, 1);
+    put32(&mut v, 12, PROFILE_SIZE as u32);
+    v[16..32].copy_from_slice(build_id);
+    put64(&mut v, 32, PROFILE_DECODED_BYTES);
+    put64(&mut v, 40, 0);
+    put32(&mut v, 48, PROFILE_WORKERS);
+    put32(&mut v, 52, PROFILE_LATENCY_RESERVE);
+    let crc = crc32(&[&v]);
+    put32(&mut v, 56, crc);
+    v
+}
+
 /// The AMPRIDX3 sort key: the folded path bytes (dump-forge's ampr_index.rs `key`).
 fn key(path: &str) -> Vec<u8> {
     path.bytes().map(folded).collect()
@@ -398,7 +459,8 @@ fn write_atomic(dir: &Path, name: &str, data: &[u8]) -> Result<()> {
 /// Writes both index files into `dir` (the game's cache dir, seen as /app0).
 /// `pkg` is the .pkg (ng opens the path in /app0/kraken.image): its size bounds the volume and its mtime goes in
 /// every record.
-pub fn write(dir: &Path, pkg: &Path, files: &[IndexFile]) -> std::io::Result<()> {
+/// `profile`: also write ng's runtime profile (setting `pkg_profile`); false removes an old one.
+pub fn write(dir: &Path, pkg: &Path, files: &[IndexFile], profile: bool) -> std::io::Result<()> {
     let meta = std::fs::metadata(pkg)?;
     let mtime = meta
         .modified()
@@ -427,6 +489,63 @@ pub fn write(dir: &Path, pkg: &Path, files: &[IndexFile]) -> std::io::Result<()>
     if zeros {
         write_atomic(dir, ZERO_NAME, &zero_volume(&manifest[24..40]))?;
     }
+    // The profile names the manifest's build id: written before it, removed when off (ng refuses
+    // a manifest whose profile does not match).
+    if profile {
+        write_atomic(dir, PROFILE_NAME, &runtime_profile(&manifest[24..40]))?;
+    } else {
+        match std::fs::remove_file(dir.join(PROFILE_NAME)) {
+            Err(e) if e.kind() != ErrorKind::NotFound => return Err(e),
+            _ => {}
+        }
+    }
     write_atomic(dir, MANIFEST_NAME, &manifest)?;
     write_atomic(dir, INDEX_NAME, &index)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// ng `load_runtime_profile`'s checks, field by field.
+    #[test]
+    fn profile_matches_ng_rules() {
+        let id: Vec<u8> = (1..=16).collect();
+        let p = runtime_profile(&id);
+        let u32_at = |o: usize| u32::from_le_bytes(p[o..o + 4].try_into().unwrap());
+        let u64_at = |o: usize| u64::from_le_bytes(p[o..o + 8].try_into().unwrap());
+        assert_eq!(p.len(), 64);
+        assert_eq!(&p[..8], b"AMPRCFG1");
+        assert_eq!(u32_at(8), 1);
+        assert_eq!(u32_at(12), 64);
+        assert_eq!(&p[16..32], &id[..]);
+        let (workers, reserve) = (u32_at(48), u32_at(52));
+        assert!((1..=16).contains(&workers) && reserve < workers);
+        assert_eq!(u64_at(32) % 16384, 0);
+        assert_eq!(u64_at(40) % 16384, 0);
+        assert_eq!(u32_at(60), 0);
+        let mut z = p.clone();
+        z[56..60].fill(0);
+        assert_eq!(crc32(&[&z]), u32_at(56));
+    }
+
+    #[test]
+    fn streams_and_videos_by_extension() {
+        assert!(stream_file("/app0/Movies/Intro.BK2"));
+        assert!(stream_file("/app0/audio/GeneratedSoundBanks/PS5/Init.bnk"));
+        assert!(stream_file("x/y.wem"));
+        assert!(!stream_file("/app0/data/level1.pak"));
+        assert!(!stream_file("/app0/bk2"));
+        assert!(!stream_file("/app0/dir.mp4/file"));
+        assert!(video_file("/app0/movie/op.usm"));
+        assert!(!video_file("/app0/sound/a.wem"));
+    }
+
+    #[test]
+    fn stream_files_are_hot_others_not() {
+        let blocks = [Chunk { pkg_off: PAGE, stored_len: 100, raw_len: BLOCK as u32, kraken: Some(Kraken { even_len: 50, mode: 2 }) }];
+        let vol = 1 << 30;
+        assert_eq!(plan("/app0/m.bk2", BLOCK, &blocks, vol).unwrap().flags, FILE_PACKED | FILE_HOT);
+        assert_eq!(plan("/app0/d.pak", BLOCK, &blocks, vol).unwrap().flags, FILE_PACKED);
+    }
 }

@@ -19,6 +19,13 @@ use std::time::SystemTime;
 
 pub const CACHES: &str = "/data/krakenmount/caches";
 pub const AMPR_DIR: &str = "/data/krakenmount/ampr";
+/// Per-title override of AMPR_DIR: when `/data/krakenmount/ampr-titles/<TID>/` exists, its files go
+/// into that title's fakelib/ instead of AMPR_DIR's (an empty dir: no ng for that title). For a
+/// debug or test build on one game, or to rule ng out when one game fails.
+pub const AMPR_TITLES_DIR: &str = "/data/krakenmount/ampr-titles";
+/// pkg stamp key "index": the AMPRPAK4 writer's version. 2: stream files carry FILE_HOT and the
+/// runtime profile exists (ampr_index.rs). An older cache rebuilds once to get them.
+const INDEX_VERSION: u64 = 2;
 pub const DONE: &str = ".done";
 /// The game lib dirs, SMP priority first. fakelib2/ is never a game file.
 const LIB_DIRS: [&str; 2] = ["fakelib2/", "fakelib/"];
@@ -217,6 +224,39 @@ pub fn pkg_source(tid: &str) -> Option<String> {
     Some(stamp["source"].as_str()?.to_string())
 }
 
+/// Whether title `tid`'s game needs ng to read its files: a pkg (every game file is in the .pkg)
+/// or a folder that ships ampr packs. A plain folder runs without ng.
+pub fn ng_required(tid: &str) -> bool {
+    let Some(stamp) = fs::read(dir(tid).join(DONE)).ok().and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+    else {
+        return false;
+    };
+    if stamp["kind"] == "pkg" {
+        return true;
+    }
+    let Some(src) = stamp["source"].as_str() else { return false };
+    ["ampr_zstd.index", "ampr_assets.index"].iter().any(|n| Path::new(src).join(n).is_file())
+}
+
+/// Whether title `tid`'s cache fakelib/ carries an ng that writes `/data/ampr_emu_status.txt`
+/// (the string is in its FSELF; ng 0.4.0 and other builds do not write it, so their launches are
+/// not checked).
+pub fn fakelib_ng_writes_status(tid: &str) -> bool {
+    let Some(sprx) = fs::read_dir(dir(tid).join("fakelib"))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .find(|e| e.file_name().to_string_lossy().eq_ignore_ascii_case("libSceAmpr.sprx"))
+    else {
+        return false;
+    };
+    fs::read(sprx.path()).is_ok_and(|b| contains(&b, b"ampr_emu_status.txt"))
+}
+
+fn contains(hay: &[u8], needle: &[u8]) -> bool {
+    hay.windows(needle.len()).any(|w| w == needle)
+}
+
 pub fn dir(tid: &str) -> PathBuf {
     Path::new(CACHES).join(tid)
 }
@@ -292,8 +332,8 @@ fn lib_dir(src: &Source) -> Option<PathBuf> {
     })
 }
 
-pub fn stamp(src: &Source, _s: &Settings) -> serde_json::Value {
-    serde_json::json!({
+pub fn stamp(src: &Source, s: &Settings) -> serde_json::Value {
+    let mut st = serde_json::json!({
         "v": 1,
         "kind": if src.kind == Kind::Pkg { "pkg" } else { "folder" },
         "source": src.path.to_string_lossy(),
@@ -301,7 +341,31 @@ pub fn stamp(src: &Source, _s: &Settings) -> serde_json::Value {
         "backport": src.backport.as_ref().map(|b| b.to_string_lossy()),
         // Which lib dir was used: a removed or newly added fakelib/fakelib2 changes it.
         "fakelib": lib_dir(src).map(|p| p.to_string_lossy().into_owned()),
-    })
+    });
+    // pkg only: what the index writer and the pkg settings made (a folder's cache has no index).
+    if src.kind == Kind::Pkg {
+        st["index"] = INDEX_VERSION.into();
+        st["media"] = s.extract_media.into();
+        st["profile"] = s.pkg_profile.into();
+    }
+    st
+}
+
+/// The ampr dir for title `tid`: its AMPR_TITLES_DIR entry when that is a dir, else AMPR_DIR.
+pub fn ampr_dir(tid: &str) -> PathBuf {
+    let own = Path::new(AMPR_TITLES_DIR).join(tid);
+    if own.is_dir() {
+        own
+    } else {
+        PathBuf::from(AMPR_DIR)
+    }
+}
+
+/// Whether an ng `libSceAmpr.sprx` serves pkg games: ng's pkg mode opens `/app0/kraken.image`, a
+/// plain string in the FSELF. An upstream ampr_emu (or another fork) lacks it, and every pkg game
+/// then starts with no packs served.
+pub fn sprx_supports_pkg(sprx: &[u8]) -> bool {
+    contains(sprx, b"kraken.image")
 }
 
 /// Existing paths whose mtime must be older than `.done`. The ampr dir is not one: launch mounts it.
@@ -436,12 +500,18 @@ fn same_files(src: &Source, s: &Settings, old: &serde_json::Value, done_mtime: S
 
 /// The ampr files fakelib/ should carry: {name: [size, mtime]} of /data/krakenmount/ampr's
 /// regular files (libkernel.sprx never copied), or null with inject_ampr off.
-fn ampr_state(s: &Settings) -> serde_json::Value {
+fn ampr_state(s: &Settings, tid: &str) -> serde_json::Value {
     if !s.inject_ampr {
         return serde_json::Value::Null;
     }
     let mut m = serde_json::Map::new();
-    for e in fs::read_dir(AMPR_DIR).into_iter().flatten().flatten() {
+    let from = ampr_dir(tid);
+    if from != Path::new(AMPR_DIR) {
+        // A switch between AMPR_DIR and the title's own dir recomposes fakelib/ even when the
+        // files look the same.
+        m.insert(".dir".into(), from.to_string_lossy().into_owned().into());
+    }
+    for e in fs::read_dir(&from).into_iter().flatten().flatten() {
         let name = e.file_name().to_string_lossy().into_owned();
         let Ok(md) = fs::metadata(e.path()) else { continue };
         if md.is_file() && ampr_copied(&name) {
@@ -498,8 +568,8 @@ pub fn check(src: &Source, s: &Settings) -> Fresh {
         .ok()
         .and_then(|b| serde_json::from_slice(&b).ok())
         .unwrap_or_default();
-    if had != ampr_state(s) {
-        return Fresh::Fakelib(format!("{AMPR_DIR} or inject_ampr changed"));
+    if had != ampr_state(s, &src.title_id) {
+        return Fresh::Fakelib(format!("{} or inject_ampr changed", ampr_dir(&src.title_id).display()));
     }
     Fresh::Fresh
 }
@@ -563,9 +633,9 @@ fn compose_fakelib(src: &Source, s: &Settings, pkg: Option<(&Io, &Pkg)>) -> Resu
     // Our ampr-emu-ng on top of whatever the game or backport ships (its own libSceAmpr.sprx included).
     // State read before the copy: a file replaced mid-copy (ampr auto-update) then differs at the
     // next check and refreshes fakelib again, instead of being recorded as already copied.
-    let state = ampr_state(s);
+    let state = ampr_state(s, &src.title_id);
     if s.inject_ampr {
-        copy_flat(Path::new(AMPR_DIR), &fakelib, ampr_copied)?;
+        copy_flat(&ampr_dir(&src.title_id), &fakelib, ampr_copied)?;
     }
     fs::write(dir.join(AMPR_STATE), state.to_string())
 }
@@ -694,7 +764,9 @@ fn build_inner(src: &Source, s: &Settings, before: &HashSet<PathBuf>) -> Result<
             // A file with sparse holes stays in the pkg: its holes are zero chunks (ampr_index).
             // ponytail: one whose holes do not start and end on its 256 KiB block grid cannot be
             // indexed and is extracted whole to the internal SSD (its size, holes included).
-            let packed = if extracted(e.path) {
+            // extract_media: a video is already compressed; loose, the kernel reads it (AvPlayer,
+            // mmap) with no ng read path in between.
+            let packed = if extracted(e.path) || (s.extract_media && ampr_index::video_file(e.path)) {
                 None
             } else if p.has_sparse(&e) {
                 let c = chunks(p, &e)?;
@@ -742,6 +814,6 @@ fn build_inner(src: &Source, s: &Settings, before: &HashSet<PathBuf>) -> Result<
     let name = src.path.file_name().and_then(|n| n.to_str()).ok_or_else(|| bad(format!("{}: file name is not UTF-8", src.path.display())))?;
     fs::write(dir.join(IMAGE_FILE), format!("{PKG_MOUNT_DIR}/{name}"))?;
     let files: Vec<IndexFile> = files.into_values().collect();
-    ampr_index::write(&dir, &src.path, &files)?;
+    ampr_index::write(&dir, &src.path, &files, s.pkg_profile)?;
     finish(&dir, src, s, start, before)
 }

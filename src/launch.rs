@@ -26,6 +26,12 @@ const PENDING_TIMEOUT_MS: u64 = 11_000;
 const PENDING_POLL_MS: u64 = 10;
 /// SMP main.c KINFO_PID_OFFSET / KINFO_TDNAME_OFFSET in the PS5 kinfo_proc.
 const KINFO_PID_OFFSET: usize = 72;
+/// ng's status file (ampr-sys rt/exports.rs `write_status`), rewritten at its module_start.
+const NG_STATUS: &str = "/data/ampr_emu_status.txt";
+/// How long after a game's exec the status file must be newer than the exec.
+const NG_CHECK_MS: u64 = 15_000;
+/// Clock slack between the exec and ng's module_start writing the file.
+const NG_CHECK_SLACK: Duration = Duration::from_secs(2);
 const KINFO_TDNAME_OFFSET: usize = 447;
 
 /// SMP sm_platform.h app_info_t.
@@ -250,6 +256,8 @@ struct Session {
     pid: Option<libc::pid_t>,
     /// (deadline, next try) of a busy cleanup, in now_ms.
     cleanup: Option<(u64, u64)>,
+    /// ng's status check of this launch: (due in now_ms, wall time of the exec).
+    ng_check: Option<(u64, std::time::SystemTime)>,
 }
 
 impl Session {
@@ -260,7 +268,7 @@ impl Session {
         if has_files(&fakelib) {
             srcs.push(fakelib);
         }
-        Session { tid: tid.to_string(), lib: None, srcs, layers: Vec::new(), data: Vec::new(), pid: None, cleanup: None }
+        Session { tid: tid.to_string(), lib: None, srcs, layers: Vec::new(), data: Vec::new(), pid: None, cleanup: None, ng_check: None }
     }
 
     /// Index in `srcs` of our overlay on top of common/lib now, if one is.
@@ -552,6 +560,10 @@ pub fn watch(titles: Arc<Mutex<HashSet<String>>>, running: Arc<Mutex<HashSet<Str
                 let d = next.saturating_sub(now);
                 wait = Some(wait.map_or(d, |x| x.min(d)));
             }
+            if let Some((due, _)) = s.ng_check {
+                let d = due.saturating_sub(now);
+                wait = Some(wait.map_or(d, |x| x.min(d)));
+            }
         }
         let ts = wait.map(|ms| libc::timespec { tv_sec: (ms / 1000) as _, tv_nsec: ((ms % 1000) * 1_000_000) as _ });
         let tsp = ts.as_ref().map_or(std::ptr::null(), |t| t as *const _);
@@ -584,13 +596,88 @@ pub fn watch(titles: Arc<Mutex<HashSet<String>>>, running: Arc<Mutex<HashSet<Str
         }
         w.poll_pending();
         w.poll_cleanups();
+        w.poll_ng_checks();
         w.publish();
     }
+}
+
+/// What ng's status file says about one launch (`parse_ng_status`).
+#[derive(Debug, PartialEq)]
+struct NgStatus {
+    version: String,
+    mode: String,
+    hooks_rc: i64,
+    index: String,
+    missing: Vec<String>,
+}
+
+fn parse_ng_status(text: &str) -> NgStatus {
+    let mut st = NgStatus { version: String::new(), mode: String::new(), hooks_rc: 0, index: String::new(), missing: Vec::new() };
+    for line in text.lines() {
+        let Some((k, v)) = line.split_once(' ') else { continue };
+        match k {
+            "ampr-emu-ng" => st.version = v.to_string(),
+            "mode" => st.mode = v.to_string(),
+            "hooks" => st.hooks_rc = v.parse().unwrap_or(-1),
+            "index" => st.index = v.to_string(),
+            "missing" => st.missing.push(v.to_string()),
+            _ => {}
+        }
+    }
+    st
+}
+
+/// The problem a status shows, for the toast: None when ng runs as it should.
+fn ng_problem(st: &NgStatus) -> Option<String> {
+    let mut parts = Vec::new();
+    if st.hooks_rc != 0 {
+        parts.push(format!("hook install failed ({})", st.hooks_rc));
+    }
+    if st.index == "fail" {
+        parts.push("index not loaded".to_string());
+    }
+    if !st.missing.is_empty() {
+        parts.push(format!("hooks missing: {}", st.missing.join(", ")));
+    }
+    (!parts.is_empty()).then(|| parts.join("; "))
 }
 
 impl Watcher {
     fn titles(&self) -> HashSet<String> {
         self.titles.lock().unwrap().clone()
+    }
+
+    /// Due status checks (`Session::ng_check`): logs what ng reported for the launch, and toasts
+    /// when ng did not load for a game that needs it (cache::ng_required) or reported a problem.
+    fn poll_ng_checks(&mut self) {
+        let now = now_ms();
+        for s in self.sessions.values_mut() {
+            let Some((due, exec)) = s.ng_check else { continue };
+            if due > now {
+                continue;
+            }
+            s.ng_check = None;
+            let fresh = std::fs::metadata(NG_STATUS)
+                .and_then(|m| m.modified())
+                .is_ok_and(|m| m + NG_CHECK_SLACK >= exec);
+            let notify = crate::config::load().notify;
+            let toast = |msg: &str| if notify { sys::notify(msg) } else { tlog!("{msg}") };
+            if !fresh {
+                if crate::cache::ng_required(&s.tid) {
+                    tlog!("{} ng status: {NG_STATUS} not written since the exec: ampr-emu-ng did not load (the game ran with the system libSceAmpr; check that the overlay was MOUNTED before the exec above)", s.tid);
+                    toast(&crate::i18n::ng_not_loaded(crate::i18n::lang(), &s.tid));
+                } else {
+                    tlog!("{} ng status: not written since the exec (a plain game that does not load libSceAmpr runs without it)", s.tid);
+                }
+                continue;
+            }
+            let text = std::fs::read_to_string(NG_STATUS).unwrap_or_default();
+            let st = parse_ng_status(&text);
+            tlog!("{} ng status: v{} mode {} hooks {} index {} missing [{}]", s.tid, st.version, st.mode, st.hooks_rc, st.index, st.missing.join(", "));
+            if let Some(what) = ng_problem(&st) {
+                toast(&crate::i18n::ng_problem(crate::i18n::lang(), &s.tid, &what));
+            }
+        }
     }
 
     /// running = the title ids of the live sessions (a session ends after its cleanup).
@@ -817,6 +904,11 @@ impl Watcher {
         }
         if s.pid != Some(pid) {
             s.pid = Some(pid);
+            // ng writes its status file at module_start: checked NG_CHECK_MS after this exec
+            // (only an ng that writes one: the bundled 0.4.0 does not).
+            if !s.srcs.is_empty() && crate::cache::fakelib_ng_writes_status(tid) {
+                s.ng_check = Some((now_ms() + NG_CHECK_MS, std::time::SystemTime::now()));
+            }
             // SMP register_game_exit_watch: EV_ADD replaces the tracked knote's fflags.
             let k = kev(pid as usize, libc::EVFILT_PROC, libc::EV_ADD | libc::EV_ENABLE | libc::EV_CLEAR, libc::NOTE_EXIT as u32);
             if let Err(e) = kevent_add(self.kq, k) {
@@ -870,5 +962,22 @@ impl Watcher {
         for name in done {
             self.sessions.remove(&name);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ng_status_parses_and_reports_problems() {
+        let ok = parse_ng_status("ampr-emu-ng 0.4.0\nmode pkg\napp0 rw\nhooks 0\nindex ok\n");
+        assert_eq!(ok, NgStatus { version: "0.4.0".into(), mode: "pkg".into(), hooks_rc: 0, index: "ok".into(), missing: vec![] });
+        assert_eq!(ng_problem(&ok), None);
+        let bad = parse_ng_status("ampr-emu-ng 0.4.0\nmode zstd\nhooks -2147352567\nindex fail\nmissing read\nmissing openat\n");
+        assert_eq!(
+            ng_problem(&bad).unwrap(),
+            "hook install failed (-2147352567); index not loaded; hooks missing: read, openat"
+        );
     }
 }

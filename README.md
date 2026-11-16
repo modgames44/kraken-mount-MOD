@@ -22,6 +22,11 @@ Other formats, such as exFAT images, are obsolete and will not be supported.
 `/data/krakenmount/ampr/` at start. To run another build, put its `libSceAmpr.sprx` there; it is
 kept until you delete it.
 
+To use another build for one game only (a debug build, say), put it in
+`/data/krakenmount/ampr-titles/<TITLE_ID>/`; an empty folder there runs that game without
+ampr-emu-ng. After each launch Kraken Mount reads `/data/ampr_emu_status.txt` and warns when
+ampr-emu-ng did not load or reported a problem (details in the log).
+
 Caches live in `/data/krakenmount/caches/<TITLE_ID>`, settings in
 `/data/krakenmount/config.toml` and the log in `/data/krakenmount/kraken.log`.
 

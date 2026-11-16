@@ -16,6 +16,15 @@ pub struct Settings {
     /// Write /data/krakenmount/kraken.log (the payload's stdout always gets the lines).
     pub log: bool,
     pub debug: bool,
+    /// pkg: copy video files (.bk2, .usm, .mp4, ...) out of the pkg into the cache, so the kernel
+    /// reads them directly instead of ng (more space on the internal SSD).
+    pub extract_media: bool,
+    /// pkg: write ng's runtime profile (one decode worker kept for small reads).
+    pub pkg_profile: bool,
+    /// GitHub `owner/repo` whose latest release the ampr-emu-ng auto-update installs: a fork that
+    /// publishes its own libSceAmpr.sprx points it at itself, so an upstream release does not
+    /// replace the fork's build.
+    pub ampr_update_repo: String,
 }
 
 impl Default for Settings {
@@ -30,6 +39,9 @@ impl Default for Settings {
             notify: true,
             log: true,
             debug: false,
+            extract_media: false,
+            pkg_profile: true,
+            ampr_update_repo: DEFAULT_UPDATE_REPO.to_string(),
         }
     }
 }
@@ -45,7 +57,19 @@ const HELP: &[(&str, &str)] = &[
     ("notify", "true = system toasts"),
     ("log", "true = write /data/krakenmount/kraken.log (starts over past 1 MiB)"),
     ("debug", "true = klog capture to /data/krakenmount/klog.txt and the /file/data/... route"),
+    ("extract_media", "true = pkg games: copy video files (.bk2 .usm .mp4 ...) out of the pkg into the cache (rebuilds pkg caches; uses more internal SSD space)"),
+    ("pkg_profile", "true = pkg games: ng keeps one decode worker for small reads (audio/video streams)"),
+    ("ampr_update_repo", "GitHub owner/repo whose latest release ampr_auto_update installs (a fork: its own repo)"),
 ];
+
+/// The auto-update source of upstream kraken-mount.
+pub const DEFAULT_UPDATE_REPO: &str = "quer3q/ampr-emu-ng";
+
+/// `owner/repo` as GitHub allows them: ASCII letters, digits, `-`, `_`, `.`; one `/`.
+fn valid_repo(v: &str) -> bool {
+    let ok = |p: &str| !p.is_empty() && p.len() <= 100 && p != "." && p != ".." && p.bytes().all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b));
+    matches!(v.split_once('/'), Some((o, r)) if ok(o) && ok(r))
+}
 
 fn flag(v: &str) -> Result<bool, String> {
     match v {
@@ -84,6 +108,10 @@ fn set(s: &mut Settings, key: &str, v: &str) -> Result<(), String> {
         "notify" => s.notify = flag(v)?,
         "log" => s.log = flag(v)?,
         "debug" => s.debug = flag(v)?,
+        "extract_media" => s.extract_media = flag(v)?,
+        "pkg_profile" => s.pkg_profile = flag(v)?,
+        "ampr_update_repo" if valid_repo(v) => s.ampr_update_repo = v.to_string(),
+        "ampr_update_repo" => return Err(format!("expected owner/repo, got {v:?}")),
         _ => return Err("unknown key".into()),
     }
     Ok(())
@@ -237,6 +265,9 @@ fn render(s: &Settings) -> String {
             "low_space_gb" => out += &format!("{k} = {}\n", s.low_space_gb),
             "notify" => out += &format!("{k} = {}\n", s.notify),
             "log" => out += &format!("{k} = {}\n", s.log),
+            "extract_media" => out += &format!("{k} = {}\n", s.extract_media),
+            "pkg_profile" => out += &format!("{k} = {}\n", s.pkg_profile),
+            "ampr_update_repo" => out += &format!("{k} = {}\n", toml_quote(&s.ampr_update_repo)),
             _ => out += &format!("{k} = {}\n", s.debug),
         }
     }
@@ -283,6 +314,9 @@ pub fn to_json(s: &Settings) -> Value {
         "notify": s.notify,
         "log": s.log,
         "debug": s.debug,
+        "extract_media": s.extract_media,
+        "pkg_profile": s.pkg_profile,
+        "ampr_update_repo": s.ampr_update_repo,
     })
 }
 

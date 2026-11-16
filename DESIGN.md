@@ -21,6 +21,8 @@ and installed into `/data/krakenmount/ampr/` at start.
 | `/data/krakenmount/config.toml` | settings (created with defaults on first start) |
 | `/data/krakenmount/caches/<TID>/` | per-game cache |
 | `/data/krakenmount/ampr.bundled` | `<version> <len> <crc32>` of the `libSceAmpr.sprx` we last wrote, bundled or downloaded (v0.4.0 builds wrote `<len> <crc32>`: ours, version unknown; outside `ampr/`, whose files all go into fakelib) |
+| `/data/krakenmount/ampr-titles/<TID>/` | optional per-title replacement of `ampr/` (`cache::ampr_dir`): its files go into that title's fakelib instead; an empty dir injects nothing. For a debug or test ng build on one game, or to rule ng out |
+| `/data/ampr_emu_status.txt` | written by ng at every module_start (version, mode, app0 rw/ro, hook rc, index ok/fail/skip, `missing <symbol>` lines); read by the launch watcher |
 | `/data/krakenmount/ampr/` | ampr-emu-ng files (`libSceAmpr.sprx`, ...), copied on top of every game's `fakelib/` in its cache (chmod 0777 at start; a `libkernel.sprx` there is never copied and logs a warning) |
 | `/data/krakenmount/kraken.log` | log (setting `log`); starts over past 1 MiB, no kept copy |
 | `/data/krakenmount/kraken-mount.elf` | self copy the tile starts (Dump Forge style, below) |
@@ -46,6 +48,9 @@ A flat TOML subset: `key = value` with strings, `true`/`false`, integers and arr
 | `notify` | true | system toasts |
 | `log` | true | write `/data/krakenmount/kraken.log` (stdout always gets the lines) |
 | `debug` | false | klog capture to `/data/krakenmount/klog.txt` and the `/file/data/...` route |
+| `extract_media` | false | pkg: video files (`ampr_index::video_file`: .bk2 .bik .usm .mp4 .m4v .mov .webm .avi .wmv .mkv) are extracted loose like the PRX files (stamp key `media`: a change rebuilds the pkg caches) |
+| `pkg_profile` | true | pkg: write ng's runtime profile `ampr_assets.index.runtime` (AMPRCFG1: 64 MiB decoded cache, 5 workers, 1 kept for reads of at most 64 KiB; stamp key `profile`) |
+| `ampr_update_repo` | `quer3q/ampr-emu-ng` | GitHub `owner/repo` whose latest release the auto-update installs; a fork that publishes its own `libSceAmpr.sprx` points it at itself |
 
 Invalid values are logged and replaced by the default. The web UI edits the same file.
 
@@ -56,7 +61,10 @@ Invalid values are logged and replaced by the default. The web UI edits the same
   `fakelib/`, `kraken/` (mount point for the pkg's folder, see Launch), `kraken.image` (one line, no
   newline: `kraken/<pkg file name>`, relative to `/app0`, the file ng opens; missing means stale), `ampr_emu.index` +
   `ampr_assets.index` (`src/ampr_index.rs`; every non-extracted file packed, fakelib and
-  backport files loose). Backport files (except its fakelib) are copied loose over pkg files.
+  backport files loose). Audio and video stream files (`ampr_index::stream_file`, by extension)
+  get ng's FILE_HOT (decoded-cache admission on first touch, latency class, read-ahead).
+  With `pkg_profile`, also `ampr_assets.index.runtime` (ng refuses the manifest when that profile
+  is invalid: its layout is unit-tested against ng's rules). Backport files (except its fakelib) are copied loose over pkg files.
   A file with sparse holes stays packed: each hole block is a RAW chunk of pack 1,
   `kraken_zero.dat` (an AMPRDAT3 volume in the cache: one 64 KiB header page + 256 KiB zeros,
   written only when a hole is packed; ng's pkg mode opens packs 1 and up as AMPRDAT3 volumes,
@@ -78,7 +86,9 @@ Invalid values are logged and replaced by the default. The web UI edits the same
   recomposed (`refresh_fakelib`, which then rewrites `.done` with its own mtime), no extraction or re-registration. `fakelib/` is not in the AMPR index.
 - A folder game's cache is only `fakelib/`, `.ampr`, `.built`, `.done`: nothing of the game is copied.
 - Fresh when `.done` exists, its JSON stamp equals the expected one
-  (`{"v":1,"kind","source","size","backport","fakelib"}`; extra keys of an older stamp are ignored), and every input's
+  (`{"v":1,"kind","source","size","backport","fakelib"}`, plus for a pkg `"index"` (the index
+  writer version, 2), `"media"` (`extract_media`) and `"profile"` (`pkg_profile`); a pkg cache from
+  before these keys rebuilds once; extra keys of an older stamp are ignored), and every input's
   mtime is older than `.done`'s mtime. Inputs: FPKG = the .pkg, backport dir (recursive);
   folder = `eboot.bin`, `sce_sys/param.json`, its lib dir and files (not the folder itself: the game
   writes there). Otherwise rebuilt. A pkg's `.done` also carries `pkg_id` (FNV-1a 64 of the size,
@@ -116,7 +126,7 @@ new folder first (`register::remount`, backport unionfs included, never MNT_FORC
 `cache::relink`; logged with the title id and both paths, toast `i18n::moved`; then the usual
 fresh path. A failed relink or remount falls back to a rebuild.
 Auto-update (ampr-emu-ng): at start, when `ampr_auto_update` and `inject_ampr` are on, a background thread asks
-`https://api.github.com/repos/quer3q/ampr-emu-ng/releases/latest` (stable releases only; betas are
+`https://api.github.com/repos/<ampr_update_repo>/releases/latest` (stable releases only; betas are
 pre-releases and skipped). When its `tag_name` is newer than the installed version, it downloads the
 asset `libSceAmpr.sprx` (size must equal the asset size, max 16 MiB, ELF or SELF magic), writes a temp
 file in `/data/krakenmount`, chmod 0777, renames it to `/data/krakenmount/ampr/libSceAmpr.sprx`, records
@@ -159,6 +169,14 @@ registered stack, backport unionfs included) over it; for a pkg game, a nullfs o
 (from the `.done` stamp's "source") at `<sandbox>/app0/kraken`; ng opens the .pkg named in `/app0/kraken.image`.
 A single-file nullfs of the .pkg is refused by the kernel (ENOTDIR), hence the folder mount.
 All removed on exit, newest first.
+ng check: at the exec of a title whose fakelib's libSceAmpr.sprx writes the status file (the
+`ampr_emu_status.txt` string is in it; the bundled 0.4.0 does not), the watcher schedules a
+check 15 s later (`poll_ng_checks`): `/data/ampr_emu_status.txt` older than the exec means ng did
+not load (logged; toast `i18n::ng_not_loaded` when `cache::ng_required`: a pkg or a folder with
+packs); a fresh one is logged, and a hook rc other than 0, `index fail` or `missing` lines give the
+toast `i18n::ng_problem`.
+Start-up: every injected `libSceAmpr.sprx` (ampr dir and `ampr-titles/*`) without ng's pkg mode
+(`cache::sprx_supports_pkg`: no `kraken.image` string) is logged with a toast (`i18n::ampr_no_pkg`).
 No overlay when neither layer applies.
 
 ## Module interfaces (contract between modules; keep these names)
@@ -167,7 +185,8 @@ No overlay when neither layer applies.
 pub const CONFIG_PATH: &str = "/data/krakenmount/config.toml";
 #[derive(Clone, PartialEq, Debug)]
 pub struct Settings { pub scan_paths: Vec<String>, pub inject_ampr: bool, pub ampr_auto_update: bool,
-  pub backports: bool, pub scan_interval_secs: u64, pub low_space_gb: u64, pub notify: bool, pub log: bool, pub debug: bool }
+  pub backports: bool, pub scan_interval_secs: u64, pub low_space_gb: u64, pub notify: bool, pub log: bool, pub debug: bool,
+  pub extract_media: bool, pub pkg_profile: bool, pub ampr_update_repo: String }
 impl Default for Settings
 pub fn load() -> Settings;                       // creates the file with defaults when missing
 pub fn save(s: &Settings) -> std::io::Result<()>;
@@ -213,6 +232,11 @@ pub fn size(tid: &str) -> u64;                                      // bytes, re
 pub fn du(path: &std::path::Path) -> u64;                           // file bytes, recursive; no symlink traversal
 pub fn total_size() -> u64;
 pub fn purge(keep: &[String]) -> std::io::Result<()>;               // delete caches/<TID> not in keep; empty the kept ones
+pub const AMPR_TITLES_DIR: &str = "/data/krakenmount/ampr-titles";
+pub fn ampr_dir(tid: &str) -> std::path::PathBuf;                   // ampr-titles/<TID> when a dir, else AMPR_DIR
+pub fn sprx_supports_pkg(sprx: &[u8]) -> bool;                      // ng pkg mode ("kraken.image" in the FSELF)
+pub fn ng_required(tid: &str) -> bool;                              // pkg, or a folder with ampr packs
+pub fn fakelib_ng_writes_status(tid: &str) -> bool;                 // fakelib/'s libSceAmpr.sprx writes the status file
 
 // register.rs
 pub fn register(title_id: &str, app0: &std::path::Path, sce_sys: &std::path::Path, backport: Option<&std::path::Path>) -> std::io::Result<()>;

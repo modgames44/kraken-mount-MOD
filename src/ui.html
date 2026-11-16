@@ -439,8 +439,11 @@ button:disabled { opacity: 0.5; cursor: default; }
       <textarea id="f_scanpath" spellcheck="false"></textarea></label>
     <label class="row"><span class="lbl" data-i18n="injectAmpr">Inject ampr-emu-ng into every game's fakelib</span><input type="checkbox" id="f_inject_ampr"></label>
     <label class="row"><span class="lbl" data-i18n="amprAutoUpdate">Auto-update ampr-emu-ng (checked once at start)</span><input type="checkbox" id="f_ampr_auto_update"></label>
+    <label class="row"><span class="lbl" data-i18n="amprUpdateRepo">Update source (GitHub owner/repo)</span><input type="text" id="f_ampr_update_repo" spellcheck="false"></label>
     <div class="row"><span><span class="lbl" id="amprstatus">ampr-emu-ng</span><span class="hint" id="amprmsg"></span></span><button id="amprupdate" type="button" data-i18n="amprUpdateNow">Update ampr-emu-ng now</button></div>
     <label class="row"><span class="lbl" data-i18n="backports">Apply backports</span><input type="checkbox" id="f_backports"></label>
+    <label class="row"><span class="lbl" data-i18n="extractMedia">pkg: copy videos out of the pkg (more SSD space, smoother cutscenes)</span><input type="checkbox" id="f_extract_media"></label>
+    <label class="row"><span class="lbl" data-i18n="pkgProfile">pkg: keep a decode worker for audio and video streams</span><input type="checkbox" id="f_pkg_profile"></label>
     <label class="row"><span class="lbl" data-i18n="scanInterval">Scan interval, seconds (1-3600)</span><input type="number" id="f_scan_interval_seconds" min="1" max="3600"></label>
     <label class="row"><span class="lbl" data-i18n="lowSpaceGb">Low space warning, GB</span><input type="number" id="f_low_space_gb" min="0"></label>
     <label class="row"><span class="lbl" data-i18n="notify">System notifications</span><input type="checkbox" id="f_notify"></label>
@@ -570,6 +573,7 @@ var MSG = {
     scanPathsHint: "One per line. Empty = default roots (/data/homebrew, /data/etaHEN/games, each drive's homebrew, etaHEN/games and root).",
     injectAmpr: "Inject ampr-emu-ng into every game's fakelib",
     amprAutoUpdate: 'Auto-update ampr-emu-ng (checked once at start)',
+    amprUpdateRepo: "Update source (GitHub owner/repo)",
     amprUpdateNow: "Update ampr-emu-ng now",
     amprUpdating: "Updating ampr-emu-ng...",
     amprBundled: "bundled",
@@ -580,6 +584,8 @@ var MSG = {
     amprReplaceText: "The latest release replaces it. Your file is moved to {backup}.",
     amprReplaceYes: "Replace",
     backports: 'Apply backports',
+    extractMedia: "pkg: copy videos out of the pkg (more SSD space, smoother cutscenes)",
+    pkgProfile: "pkg: keep a decode worker for audio and video streams",
     scanInterval: 'Scan interval, seconds (1-3600)',
     lowSpaceGb: 'Low space warning, GB',
     notify: 'System notifications',
@@ -647,6 +653,7 @@ var MSG = {
     scanPathsHint: 'По одному на строку. Пусто = корни по умолчанию (/data/homebrew, /data/etaHEN/games, на каждом накопителе homebrew, etaHEN/games и корень).',
     injectAmpr: 'Внедрять ampr-emu-ng в fakelib каждой игры',
     amprAutoUpdate: 'Автообновление ampr-emu-ng (проверка один раз при запуске)',
+    amprUpdateRepo: "Источник обновлений (GitHub owner/repo)",
     amprUpdateNow: "Обновить ampr-emu-ng сейчас",
     amprUpdating: "Обновление ampr-emu-ng...",
     amprBundled: "встроенный",
@@ -657,6 +664,8 @@ var MSG = {
     amprReplaceText: "Его заменит последний релиз. Ваш файл будет перемещён в {backup}.",
     amprReplaceYes: "Заменить",
     backports: 'Применять бэкпорты',
+    extractMedia: "pkg: извлекать видео из pkg (больше места на SSD, плавнее ролики)",
+    pkgProfile: "pkg: держать поток декодирования для аудио и видео",
     scanInterval: 'Интервал сканирования, секунды (1-3600)',
     lowSpaceGb: 'Предупреждать о нехватке места, GB',
     notify: 'Системные уведомления',
@@ -724,6 +733,7 @@ var MSG = {
     scanPathsHint: '每行一个。留空 = 默认根目录（/data/homebrew、/data/etaHEN/games，以及每个驱动器的 homebrew、etaHEN/games 和根目录）。',
     injectAmpr: '将 ampr-emu-ng 注入每个游戏的 fakelib',
     amprAutoUpdate: '自动更新 ampr-emu-ng（启动时检查一次）',
+    amprUpdateRepo: "更新来源（GitHub owner/repo）",
     amprUpdateNow: "立即更新 ampr-emu-ng",
     amprUpdating: "正在更新 ampr-emu-ng...",
     amprBundled: "内置",
@@ -734,6 +744,8 @@ var MSG = {
     amprReplaceText: "将由最新版本替换。你的文件会移动到 {backup}。",
     amprReplaceYes: "替换",
     backports: '应用向下移植',
+    extractMedia: "pkg：将视频从 pkg 中提取出来（占用更多 SSD 空间，过场动画更流畅）",
+    pkgProfile: "pkg：为音频和视频流保留一个解码线程",
     scanInterval: '扫描间隔，秒 (1-3600)',
     lowSpaceGb: '空间不足警告，GB',
     notify: '系统通知',
@@ -801,6 +813,7 @@ var MSG = {
     scanPathsHint: 'Einer pro Zeile. Leer = Standardorte (/data/homebrew, /data/etaHEN/games, auf jedem Laufwerk homebrew, etaHEN/games und das Stammverzeichnis).',
     injectAmpr: 'ampr-emu-ng in die fakelib jedes Spiels einfügen',
     amprAutoUpdate: 'ampr-emu-ng automatisch aktualisieren (einmal beim Start geprüft)',
+    amprUpdateRepo: "Update-Quelle (GitHub owner/repo)",
     amprUpdateNow: "ampr-emu-ng jetzt aktualisieren",
     amprUpdating: "ampr-emu-ng wird aktualisiert...",
     amprBundled: "mitgeliefert",
@@ -811,6 +824,8 @@ var MSG = {
     amprReplaceText: "Die neueste Version ersetzt es. Deine Datei wird nach {backup} verschoben.",
     amprReplaceYes: "Ersetzen",
     backports: 'Backports anwenden',
+    extractMedia: "pkg: Videos aus dem pkg kopieren (mehr SSD-Platz, flüssigere Zwischensequenzen)",
+    pkgProfile: "pkg: einen Dekodier-Worker für Audio- und Videostreams freihalten",
     scanInterval: 'Scan-Intervall, Sekunden (1-3600)',
     lowSpaceGb: 'Warnung bei wenig Platz, GB',
     notify: 'Systembenachrichtigungen',
@@ -878,6 +893,7 @@ var MSG = {
     scanPathsHint: 'Una por línea. Vacío = raíces predeterminadas (/data/homebrew, /data/etaHEN/games y, en cada unidad, homebrew, etaHEN/games y la raíz).',
     injectAmpr: 'Inyectar ampr-emu-ng en la fakelib de cada juego',
     amprAutoUpdate: 'Actualizar ampr-emu-ng automáticamente (se comprueba una vez al iniciar)',
+    amprUpdateRepo: "Origen de actualizaciones (GitHub owner/repo)",
     amprUpdateNow: "Actualizar ampr-emu-ng ahora",
     amprUpdating: "Actualizando ampr-emu-ng...",
     amprBundled: "incluido",
@@ -888,6 +904,8 @@ var MSG = {
     amprReplaceText: "La última versión lo reemplaza. Tu archivo se mueve a {backup}.",
     amprReplaceYes: "Reemplazar",
     backports: 'Aplicar backports',
+    extractMedia: "pkg: copiar los videos fuera del pkg (más espacio en el SSD, cinemáticas más fluidas)",
+    pkgProfile: "pkg: reservar un hilo de decodificación para audio y video",
     scanInterval: 'Intervalo de escaneo, segundos (1-3600)',
     lowSpaceGb: 'Aviso de poco espacio, GB',
     notify: 'Notificaciones del sistema',
@@ -955,6 +973,7 @@ var MSG = {
     scanPathsHint: 'Un par ligne. Vide = racines par défaut (/data/homebrew, /data/etaHEN/games et, sur chaque disque, homebrew, etaHEN/games et la racine).',
     injectAmpr: 'Injecter ampr-emu-ng dans la fakelib de chaque jeu',
     amprAutoUpdate: 'Mettre à jour ampr-emu-ng automatiquement (vérifié une fois au démarrage)',
+    amprUpdateRepo: "Source des mises à jour (GitHub owner/repo)",
     amprUpdateNow: "Mettre à jour ampr-emu-ng maintenant",
     amprUpdating: "Mise à jour d'ampr-emu-ng...",
     amprBundled: "intégré",
@@ -965,6 +984,8 @@ var MSG = {
     amprReplaceText: "La dernière version le remplace. Votre fichier est déplacé vers {backup}.",
     amprReplaceYes: "Remplacer",
     backports: 'Appliquer les backports',
+    extractMedia: "pkg : extraire les vidéos du pkg (plus d'espace SSD, cinématiques plus fluides)",
+    pkgProfile: "pkg : réserver un worker de décodage aux flux audio et vidéo",
     scanInterval: "Intervalle d'analyse, secondes (1-3600)",
     lowSpaceGb: 'Alerte de place faible, GB',
     notify: 'Notifications système',
@@ -1032,6 +1053,7 @@ var MSG = {
     scanPathsHint: '1 行に 1 つ。空欄 = 既定のルート（/data/homebrew、/data/etaHEN/games、各ドライブの homebrew、etaHEN/games とルート）。',
     injectAmpr: 'すべてのゲームの fakelib に ampr-emu-ng を組み込む',
     amprAutoUpdate: 'ampr-emu-ng を自動更新（起動時に一度確認）',
+    amprUpdateRepo: "更新元（GitHub owner/repo）",
     amprUpdateNow: "今すぐ ampr-emu-ng を更新",
     amprUpdating: "ampr-emu-ng を更新中...",
     amprBundled: "同梱",
@@ -1042,6 +1064,8 @@ var MSG = {
     amprReplaceText: "最新リリースで置き換えます。元のファイルは {backup} に移動されます。",
     amprReplaceYes: "置き換える",
     backports: 'バックポートを適用',
+    extractMedia: "pkg: 動画を pkg から取り出す（SSD 容量を多く使用、ムービーが滑らかに）",
+    pkgProfile: "pkg: 音声・動画ストリーム用にデコードワーカーを確保",
     scanInterval: 'スキャン間隔、秒 (1-3600)',
     lowSpaceGb: '空き容量不足の警告、GB',
     notify: 'システム通知',
@@ -1109,6 +1133,7 @@ var MSG = {
     scanPathsHint: 'Um por linha. Vazio = raízes padrão (/data/homebrew, /data/etaHEN/games e, em cada drive, homebrew, etaHEN/games e a raiz).',
     injectAmpr: 'Injetar ampr-emu-ng na fakelib de cada jogo',
     amprAutoUpdate: 'Atualizar o ampr-emu-ng automaticamente (verificado uma vez ao iniciar)',
+    amprUpdateRepo: "Origem das atualizações (GitHub owner/repo)",
     amprUpdateNow: "Atualizar o ampr-emu-ng agora",
     amprUpdating: "Atualizando o ampr-emu-ng...",
     amprBundled: "incluído",
@@ -1119,6 +1144,8 @@ var MSG = {
     amprReplaceText: "A versão mais recente o substitui. Seu arquivo é movido para {backup}.",
     amprReplaceYes: "Substituir",
     backports: 'Aplicar backports',
+    extractMedia: "pkg: copiar os vídeos para fora do pkg (mais espaço no SSD, cenas mais fluidas)",
+    pkgProfile: "pkg: reservar um worker de decodificação para áudio e vídeo",
     scanInterval: 'Intervalo de varredura, segundos (1-3600)',
     lowSpaceGb: 'Aviso de pouco espaço, GB',
     notify: 'Notificações do sistema',
@@ -1186,6 +1213,7 @@ var MSG = {
     scanPathsHint: "Uno per riga. Vuoto = radici predefinite (/data/homebrew, /data/etaHEN/games e, su ogni unità, homebrew, etaHEN/games e la radice).",
     injectAmpr: 'Inserisci ampr-emu-ng nella fakelib di ogni gioco',
     amprAutoUpdate: "Aggiorna automaticamente ampr-emu-ng (controllato una volta all'avvio)",
+    amprUpdateRepo: "Origine degli aggiornamenti (GitHub owner/repo)",
     amprUpdateNow: "Aggiorna ampr-emu-ng ora",
     amprUpdating: "Aggiornamento di ampr-emu-ng...",
     amprBundled: "incluso",
@@ -1196,6 +1224,8 @@ var MSG = {
     amprReplaceText: "L'ultima versione lo sostituisce. Il tuo file viene spostato in {backup}.",
     amprReplaceYes: "Sostituisci",
     backports: 'Applica i backport',
+    extractMedia: "pkg: copia i video fuori dal pkg (più spazio sull'SSD, filmati più fluidi)",
+    pkgProfile: "pkg: riserva un worker di decodifica per audio e video",
     scanInterval: 'Intervallo di scansione, secondi (1-3600)',
     lowSpaceGb: 'Avviso spazio insufficiente, GB',
     notify: 'Notifiche di sistema',
@@ -1263,6 +1293,7 @@ var MSG = {
     scanPathsHint: '한 줄에 하나씩. 비워 두면 기본 루트(/data/homebrew, /data/etaHEN/games, 각 드라이브의 homebrew, etaHEN/games 및 루트).',
     injectAmpr: '모든 게임의 fakelib에 ampr-emu-ng 삽입',
     amprAutoUpdate: 'ampr-emu-ng 자동 업데이트 (시작 시 한 번 확인)',
+    amprUpdateRepo: "업데이트 소스 (GitHub owner/repo)",
     amprUpdateNow: "지금 ampr-emu-ng 업데이트",
     amprUpdating: "ampr-emu-ng 업데이트 중...",
     amprBundled: "내장",
@@ -1273,6 +1304,8 @@ var MSG = {
     amprReplaceText: "최신 릴리스로 바꿉니다. 기존 파일은 {backup}(으)로 옮겨집니다.",
     amprReplaceYes: "바꾸기",
     backports: '백포트 적용',
+    extractMedia: "pkg: 동영상을 pkg 밖으로 복사 (SSD 공간 더 사용, 컷신이 더 부드러움)",
+    pkgProfile: "pkg: 오디오·비디오 스트림용 디코드 워커 유지",
     scanInterval: '스캔 간격, 초 (1-3600)',
     lowSpaceGb: '공간 부족 경고, GB',
     notify: '시스템 알림',
@@ -1340,6 +1373,7 @@ var MSG = {
     scanPathsHint: 'مسار واحد في كل سطر. فارغ = الجذور الافتراضية (/data/homebrew و/data/etaHEN/games، وعلى كل محرك homebrew وetaHEN/games والجذر).',
     injectAmpr: 'حقن ampr-emu-ng في fakelib لكل لعبة',
     amprAutoUpdate: 'تحديث ampr-emu-ng تلقائيًا (يُفحص مرة واحدة عند البدء)',
+    amprUpdateRepo: "مصدر التحديثات (GitHub owner/repo)",
     amprUpdateNow: "تحديث ampr-emu-ng الآن",
     amprUpdating: "جارٍ تحديث ampr-emu-ng...",
     amprBundled: "مضمّن",
@@ -1350,6 +1384,8 @@ var MSG = {
     amprReplaceText: "سيستبدله أحدث إصدار. يُنقل ملفك إلى {backup}.",
     amprReplaceYes: "استبدال",
     backports: 'تطبيق الباكبورت',
+    extractMedia: "pkg: نسخ مقاطع الفيديو خارج pkg (مساحة أكبر على SSD، مشاهد أكثر سلاسة)",
+    pkgProfile: "pkg: تخصيص عامل فك ترميز لتدفقات الصوت والفيديو",
     scanInterval: 'فاصل المسح، بالثواني (1-3600)',
     lowSpaceGb: 'تحذير المساحة القليلة، GB',
     notify: 'إشعارات النظام',
@@ -1955,11 +1991,12 @@ async function poll() {
 }
 
 // ---- chunk 3: settings, log, views, keys ----
-var BOOLS = ['inject_ampr', 'ampr_auto_update', 'backports', 'notify', 'log', 'debug'];
+var BOOLS = ['inject_ampr', 'ampr_auto_update', 'backports', 'extract_media', 'pkg_profile', 'notify', 'log', 'debug'];
 var NUMS = ['scan_interval_seconds', 'low_space_gb'];
 var settingsRequest = 0;
 function fillSettings(v) {
   $('f_scanpath').value = (v.scanpath || []).join('\n');
+  $('f_ampr_update_repo').value = v.ampr_update_repo || '';
   BOOLS.forEach(function (k) { $('f_' + k).checked = v[k] === true || v[k] === 1; });
   NUMS.forEach(function (k) { $('f_' + k).value = v[k] == null ? '' : v[k]; });
 }
@@ -1967,6 +2004,8 @@ function readSettings() {
   var v = {
     scanpath: $('f_scanpath').value.split('\n').map(function (x) { return x.trim(); }).filter(Boolean)
   };
+  var repo = $('f_ampr_update_repo').value.trim();
+  if (repo) v.ampr_update_repo = repo;
   BOOLS.forEach(function (k) { v[k] = $('f_' + k).checked; });
   NUMS.forEach(function (k) { var n = parseInt($('f_' + k).value, 10); if (!isNaN(n)) v[k] = n; });
   return v;
