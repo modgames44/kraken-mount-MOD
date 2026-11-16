@@ -173,8 +173,9 @@ ng check: at the exec of a title whose fakelib's libSceAmpr.sprx writes the stat
 `ampr_emu_status.txt` string is in it; the bundled 0.4.0 does not), the watcher schedules a
 check 15 s later (`poll_ng_checks`): `/data/ampr_emu_status.txt` older than the exec means ng did
 not load (logged; toast `i18n::ng_not_loaded` when `cache::ng_required`: a pkg or a folder with
-packs); a fresh one is logged, and a hook rc other than 0, `index fail` or `missing` lines give the
-toast `i18n::ng_problem`.
+packs); a fresh one is logged, and a hook rc other than 0, `index fail` or `failed <symbol>` lines give
+the toast `i18n::ng_problem` (`alias`/`absent` lines, and the `missing` lines of ng 0.5.0-0.5.2, are
+hooks served under another name or not exported: logged only).
 Start-up: every injected `libSceAmpr.sprx` (ampr dir and `ampr-titles/*`) without ng's pkg mode
 (`cache::sprx_supports_pkg`: no `kraken.image` string) is logged with a toast (`i18n::ampr_no_pkg`).
 No overlay when neither layer applies.

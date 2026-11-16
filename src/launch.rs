@@ -608,11 +608,15 @@ struct NgStatus {
     mode: String,
     hooks_rc: i64,
     index: String,
-    missing: Vec<String>,
+    /// `failed <symbol>`: the detour failed, coverage lost (a problem).
+    failed: Vec<String>,
+    /// `alias`, `absent` and the pre-0.5.3 `missing` lines: hooks served under another name or not
+    /// exported by this firmware; logged only (`missing` mixed all three, mostly harmless ones).
+    info: Vec<String>,
 }
 
 fn parse_ng_status(text: &str) -> NgStatus {
-    let mut st = NgStatus { version: String::new(), mode: String::new(), hooks_rc: 0, index: String::new(), missing: Vec::new() };
+    let mut st = NgStatus { version: String::new(), mode: String::new(), hooks_rc: 0, index: String::new(), failed: Vec::new(), info: Vec::new() };
     for line in text.lines() {
         let Some((k, v)) = line.split_once(' ') else { continue };
         match k {
@@ -620,7 +624,8 @@ fn parse_ng_status(text: &str) -> NgStatus {
             "mode" => st.mode = v.to_string(),
             "hooks" => st.hooks_rc = v.parse().unwrap_or(-1),
             "index" => st.index = v.to_string(),
-            "missing" => st.missing.push(v.to_string()),
+            "failed" => st.failed.push(v.to_string()),
+            "alias" | "absent" | "missing" => st.info.push(format!("{k} {v}")),
             _ => {}
         }
     }
@@ -636,8 +641,8 @@ fn ng_problem(st: &NgStatus) -> Option<String> {
     if st.index == "fail" {
         parts.push("index not loaded".to_string());
     }
-    if !st.missing.is_empty() {
-        parts.push(format!("hooks missing: {}", st.missing.join(", ")));
+    if !st.failed.is_empty() {
+        parts.push(format!("hooks failed: {}", st.failed.join(", ")));
     }
     (!parts.is_empty()).then(|| parts.join("; "))
 }
@@ -673,7 +678,16 @@ impl Watcher {
             }
             let text = std::fs::read_to_string(NG_STATUS).unwrap_or_default();
             let st = parse_ng_status(&text);
-            tlog!("{} ng status: v{} mode {} hooks {} index {} missing [{}]", s.tid, st.version, st.mode, st.hooks_rc, st.index, st.missing.join(", "));
+            tlog!(
+                "{} ng status: v{} mode {} hooks {} index {} failed [{}] other [{}]",
+                s.tid,
+                st.version,
+                st.mode,
+                st.hooks_rc,
+                st.index,
+                st.failed.join(", "),
+                st.info.join(", ")
+            );
             if let Some(what) = ng_problem(&st) {
                 toast(&crate::i18n::ng_problem(crate::i18n::lang(), &s.tid, &what));
             }
@@ -971,13 +985,16 @@ mod tests {
 
     #[test]
     fn ng_status_parses_and_reports_problems() {
-        let ok = parse_ng_status("ampr-emu-ng 0.4.0\nmode pkg\napp0 rw\nhooks 0\nindex ok\n");
-        assert_eq!(ok, NgStatus { version: "0.4.0".into(), mode: "pkg".into(), hooks_rc: 0, index: "ok".into(), missing: vec![] });
+        let ok = parse_ng_status("ampr-emu-ng 0.5.3\nmode pkg\napp0 rw\nhooks 0\nindex ok\nalias _fstat\nabsent fstatat\n");
+        assert_eq!(ok.info, vec!["alias _fstat", "absent fstatat"]);
         assert_eq!(ng_problem(&ok), None);
-        let bad = parse_ng_status("ampr-emu-ng 0.4.0\nmode zstd\nhooks -2147352567\nindex fail\nmissing read\nmissing openat\n");
+        // 0.5.0-0.5.2 wrote every hook not installed as `missing`: logged, no toast.
+        let old = parse_ng_status("ampr-emu-ng 0.5.1\nmode pkg\nhooks 0\nindex ok\nmissing _fstat\nmissing openat\n");
+        assert_eq!(ng_problem(&old), None);
+        let bad = parse_ng_status("ampr-emu-ng 0.5.3\nmode zstd\nhooks -2147352567\nindex fail\nfailed read\nfailed sceKernelAioSubmitReadCommands\n");
         assert_eq!(
             ng_problem(&bad).unwrap(),
-            "hook install failed (-2147352567); index not loaded; hooks missing: read, openat"
+            "hook install failed (-2147352567); index not loaded; hooks failed: read, sceKernelAioSubmitReadCommands"
         );
     }
 }
