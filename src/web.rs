@@ -331,6 +331,8 @@ fn route(state: &State, head: &str, body: &[u8], loopback: bool) -> Reply {
         }
         ("GET", p) if p.starts_with("/icon/") => image(state, &p["/icon/".len()..], &["icon0.png"]),
         ("GET", p) if p.starts_with("/pic/") => image(state, &p["/pic/".len()..], &["pic0.png", "pic1.png"]),
+        // Reports of the debug ng (launch.rs capture_debug), whatever the `debug` setting.
+        ("GET", p) if p.starts_with("/api/debug/") => debug_report(&p["/api/debug/".len()..]),
         // Debug: read a file under /data (logs, klog.txt). Read-only.
         ("GET", p) if p.starts_with("/file/data/") && state.settings.lock().unwrap().debug => {
             dbg_file(&p["/file".len()..], query)
@@ -361,6 +363,24 @@ fn post_settings(state: &State, body: &[u8]) -> Reply {
 /// Serves an absolute path under /data (no traversal above /data). Whole file: first 256 KiB as
 /// text. With ?off=N&len=M: those bytes (M <= 16 MiB) as octet-stream, read in place, so large
 /// files can be pulled in pieces.
+/// GET /api/debug/<TID>: the saved report names; /api/debug/<TID>/<name>: one report as text.
+fn debug_report(rest: &str) -> Reply {
+    const NAMES: [&str; 6] = ["metrics.txt", "metrics-start.txt", "fsfail.txt", "status.txt", "trace.txt", ""];
+    let (tid, name) = rest.split_once('/').unwrap_or((rest, ""));
+    if !crate::config::valid_tid(tid) || !NAMES.contains(&name) {
+        return not_found();
+    }
+    let dir = std::path::Path::new(crate::cache::DEBUG_REPORTS_DIR).join(tid);
+    if name.is_empty() {
+        let have: Vec<&str> = NAMES[..5].iter().copied().filter(|n| dir.join(n).is_file()).collect();
+        return reply(200, "application/json", serde_json::json!({ "title": tid, "files": have }).to_string());
+    }
+    match std::fs::read(dir.join(name)) {
+        Ok(b) => reply(200, "text/plain; charset=utf-8", b),
+        Err(_) => not_found(),
+    }
+}
+
 fn dbg_file(path: &str, query: &str) -> Reply {
     use std::os::unix::fs::FileExt;
     if path.contains("..") {

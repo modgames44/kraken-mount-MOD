@@ -3,8 +3,8 @@
 A PS5 game mounter. It finds games on the internal SSD, the M.2 drive and USB drives, and adds
 them to the home screen without installing them.
 
-Supported formats: debug FPKG (`.pkg`) and game folders (plain, or packed with zstd or LZ4).
-Other formats, such as exFAT images, are obsolete and will not be supported.
+Supported formats: debug FPKG (`.pkg`), game folders (plain, or packed with zstd or LZ4) and exFAT
+images (`.exfat`, or `.zstd` holding an exFAT image), mounted read-only as ShadowMount+ does.
 
 ## How to
 
@@ -26,6 +26,15 @@ To use another build for one game only (a debug build, say), put it in
 `/data/krakenmount/ampr-titles/<TITLE_ID>/`; an empty folder there runs that game without
 ampr-emu-ng. After each launch Kraken Mount reads `/data/ampr_emu_status.txt` and warns when
 ampr-emu-ng did not load or reported a problem (details in the log).
+
+Debugging one game: add its title id to "Debug ampr-emu-ng for these games" in the settings
+(`ampr_debug_titles`). That game then runs the bundled debug build, and while it runs Kraken Mount
+saves its metrics to `/data/krakenmount/debug/<TITLE_ID>/` (also at
+`http://<ps5-ip>:8097/api/debug/<TITLE_ID>/metrics.txt`).
+
+Building both projects (Linux or WSL, Docker running):
+`./ps5/build-all.sh ../ampr-emu-ng-main` builds ampr-emu-ng, bundles it (`ps5/vendor-ampr.sh`) and
+builds kraken-mount; the results go to `salida/`.
 
 Caches live in `/data/krakenmount/caches/<TITLE_ID>`, settings in
 `/data/krakenmount/config.toml` and the log in `/data/krakenmount/kraken.log`.

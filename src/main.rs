@@ -14,6 +14,7 @@ mod config;
 mod launch;
 mod net;
 mod register;
+mod image;
 mod scan;
 mod storage;
 mod web;
@@ -81,6 +82,7 @@ fn build_and_register(state: &State, s: &Settings, src: &Source, fresh: &Fresh, 
     if !stale && register::is_registered(tid) {
         // ponytail: registered by an earlier run; only the nullfs is redone (gone after a
         // reboot; a no-op when mounted): no sce_sys copy, no install call.
+        cache::fix_access(src);
         register::mount(tid, &app0, backport_of(src))?;
         return Ok(false);
     }
@@ -96,6 +98,8 @@ fn build_and_register(state: &State, s: &Settings, src: &Source, fresh: &Fresh, 
         check_space(state, s);
         r?;
     }
+    // Once per run per title: build_and_register runs only for titles not registered in this run.
+    cache::fix_access(src);
     register::register(tid, &app0, &cache::sce_sys(src), backport_of(src))?;
     Ok(true)
 }
@@ -109,6 +113,8 @@ fn relink_moved(s: &Settings, src: &Source, from: &std::path::Path) -> std::io::
         register::remount(&src.title_id, &cache::app0(src), backport_of(src))?;
     }
     cache::relink(src, s, from)?;
+    // The moved copy may have other modes, and a registered title skips build_and_register.
+    cache::fix_access(src);
     toast(s, &i18n::moved(i18n::lang(), &src.title_name, &src.path.to_string_lossy()));
     Ok(())
 }
@@ -537,7 +543,7 @@ fn prepare_ampr() {
 /// Every libSceAmpr.sprx kraken-mount injects (the ampr dir, each per-title dir) checked for ng's pkg
 /// mode at start: one log line and toast per file without it.
 fn check_ampr_pkg_mode(s: &Settings) {
-    let mut dirs = vec![std::path::PathBuf::from(cache::AMPR_DIR)];
+    let mut dirs = vec![std::path::PathBuf::from(cache::AMPR_DIR), std::path::PathBuf::from(cache::AMPR_DEBUG_DIR)];
     dirs.extend(std::fs::read_dir(cache::AMPR_TITLES_DIR).into_iter().flatten().flatten().map(|e| e.path()));
     for dir in dirs {
         let path = dir.join("libSceAmpr.sprx");
@@ -546,6 +552,28 @@ fn check_ampr_pkg_mode(s: &Settings) {
             log!("ampr: WARNING {} has no pkg mode (no kraken.image): pkg games get no packed files from it", path.display());
             toast(s, &i18n::ampr_no_pkg(i18n::lang(), &path.to_string_lossy()));
         }
+    }
+}
+
+/// The debug build bundled beside the release one (build.rs: empty when vendor/ has none).
+const BUNDLED_AMPR_DEBUG: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ampr-debug.sprx"));
+
+/// Keeps AMPR_DEBUG_DIR/libSceAmpr.sprx equal to the bundled debug build (the folder is ours: no
+/// hand-placed check). Without a bundled debug build, setting `ampr_debug_titles` has no effect.
+fn install_debug_ampr() {
+    let path = format!("{}/libSceAmpr.sprx", cache::AMPR_DEBUG_DIR);
+    if BUNDLED_AMPR_DEBUG.is_empty() {
+        return;
+    }
+    if std::fs::read(&path).is_ok_and(|b| b == BUNDLED_AMPR_DEBUG) {
+        return;
+    }
+    let r = std::fs::create_dir_all(cache::AMPR_DEBUG_DIR)
+        .and_then(|()| std::fs::write(&path, BUNDLED_AMPR_DEBUG))
+        .and_then(|()| std::fs::set_permissions(&path, std::os::unix::fs::PermissionsExt::from_mode(0o777)));
+    match r {
+        Ok(()) => log!("ampr: installed the bundled debug ampr-emu-ng ({} bytes) to {path}", BUNDLED_AMPR_DEBUG.len()),
+        Err(e) => log!("ampr: install debug ampr-emu-ng to {path}: {e}"),
     }
 }
 
@@ -586,6 +614,10 @@ fn wait_ready(state: &State) {
 }
 
 fn main() {
+    // ponytail: umask 0 for the whole payload, so every dir/file it creates is 0777/0666 (as SMP,
+    // which mkdirs 0777) whatever elfldr passes: the game and the system services (save data,
+    // trophies) read them with another uid. Code that wants a narrower mode sets it explicitly.
+    unsafe { libc::umask(0) };
     // panic=abort: record the panic in kraken.log before the payload dies.
     std::panic::set_hook(Box::new(|info| sys::log_line(&format!("PANIC: {info}"))));
     for dir in [DATA_DIR, cache::CACHES, cache::AMPR_DIR] {
@@ -602,6 +634,7 @@ fn main() {
     };
     toast(&s, i18n::started(i18n::lang()));
     install_bundled_ampr();
+    install_debug_ampr();
     prepare_ampr();
     check_ampr_pkg_mode(&s);
     std::thread::spawn(save_self_copy);
@@ -644,7 +677,12 @@ fn main() {
         *state.settings.lock().unwrap() = s.clone();
         state.busy.store(true, Ordering::SeqCst);
         let roots = if s.scan_paths.is_empty() { storage::default_scan_roots() } else { s.scan_paths.clone() };
-        let r = scan::scan(&roots, s.backports);
+        // exFAT images (.exfat / .zstd) are mounted first; their mount dir is scanned as one more root.
+        let mut scan_roots = roots.clone();
+        if image::sync(&roots) {
+            scan_roots.push(image::IMAGE_BASE.to_string());
+        }
+        let r = scan::scan(&scan_roots, s.backports);
         if state.paused() {
             continue;
         }

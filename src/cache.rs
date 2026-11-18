@@ -23,6 +23,11 @@ pub const AMPR_DIR: &str = "/data/krakenmount/ampr";
 /// into that title's fakelib/ instead of AMPR_DIR's (an empty dir: no ng for that title). For a
 /// debug or test build on one game, or to rule ng out when one game fails.
 pub const AMPR_TITLES_DIR: &str = "/data/krakenmount/ampr-titles";
+/// The bundled debug ng (main.rs `install_debug_ampr`), for the titles in setting
+/// `ampr_debug_titles`.
+pub const AMPR_DEBUG_DIR: &str = "/data/krakenmount/ampr-debug";
+/// What the launch watcher saves from a debug ng while its game runs, one folder per title.
+pub const DEBUG_REPORTS_DIR: &str = "/data/krakenmount/debug";
 /// pkg stamp key "index": the AMPRPAK4 writer's version. 2: stream files carry FILE_HOT and the
 /// runtime profile exists (ampr_index.rs). An older cache rebuilds once to get them.
 const INDEX_VERSION: u64 = 2;
@@ -241,6 +246,19 @@ pub fn ng_required(tid: &str) -> bool {
 /// Whether title `tid`'s cache fakelib/ carries an ng that writes `/data/ampr_emu_status.txt`
 /// (the string is in its FSELF; ng 0.4.0 and other builds do not write it, so their launches are
 /// not checked).
+/// Whether title `tid`'s cache fakelib/ carries the debug ng (its metrics server string).
+pub fn fakelib_ng_is_debug(tid: &str) -> bool {
+    fakelib_ampr(tid).is_some_and(|b| contains(&b, b"AMPR metrics: listening"))
+}
+
+fn fakelib_ampr(tid: &str) -> Option<Vec<u8>> {
+    let e = fs::read_dir(dir(tid).join("fakelib"))
+        .ok()?
+        .flatten()
+        .find(|e| e.file_name().to_string_lossy().eq_ignore_ascii_case("libSceAmpr.sprx"))?;
+    fs::read(e.path()).ok()
+}
+
 pub fn fakelib_ng_writes_status(tid: &str) -> bool {
     let Some(sprx) = fs::read_dir(dir(tid).join("fakelib"))
         .into_iter()
@@ -316,6 +334,78 @@ pub fn purge(keep: &[String]) -> Result<()> {
     Ok(())
 }
 
+/// `mode` with the `want` bits added, or None when none is missing (fix_access only adds bits).
+fn add_bits(mode: u32, want: u32) -> Option<u32> {
+    let mode = mode & 0o7777;
+    (mode & want != want).then_some(mode | want)
+}
+
+/// fix_access's tally: modes fixed, chmods failed and the first failure.
+#[derive(Default)]
+struct Access {
+    fixed: u64,
+    failed: u64,
+    first: Option<(PathBuf, Error)>,
+}
+
+impl Access {
+    /// Adds `dirs` to a dir, `files` to a regular file; anything else (symlinks: never followed) is skipped.
+    fn entry(&mut self, path: &Path, m: &fs::Metadata, dirs: u32, files: u32) {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        let want = if m.is_dir() { dirs } else if m.is_file() { files } else { return };
+        let Some(mode) = add_bits(m.mode(), want) else { return };
+        match fs::set_permissions(path, fs::Permissions::from_mode(mode)) {
+            Ok(()) => self.fixed += 1,
+            Err(e) => {
+                self.failed += 1;
+                self.first.get_or_insert((path.to_path_buf(), e));
+            }
+        }
+    }
+
+    /// `path` itself (lstat), then everything under it when it is a dir.
+    fn tree(&mut self, path: &Path, dirs: u32, files: u32) {
+        let Ok(m) = fs::symlink_metadata(path) else { return };
+        self.entry(path, &m, dirs, files);
+        if m.is_dir() {
+            for (p, m) in walk(path) {
+                self.entry(&p, &m, dirs, files);
+            }
+        }
+    }
+}
+
+/// Opens up `src`'s files for the game and the system services (save data, trophies), which read
+/// them with another uid than the payload. Only adds bits, only chmods when some are missing,
+/// never follows symlinks: the cache dir (dirs 0777: /app0 is writable; files +0444); a pkg's
+/// .pkg (+0444) and its folder (+0555, the /app0/kraken nullfs; ng falls back to LZ4 mode when it
+/// cannot open the .pkg); a folder game's tree (dirs +0555, files +0444). Never fails: one log
+/// line per title when something was fixed or failed (exFAT USB, read-only), with the first failure.
+/// ponytail: one lstat walk of the cache and the game folder per run (main.rs calls it once per
+/// title); a 150k-file folder costs that walk, and files added later wait for the next run.
+pub fn fix_access(src: &Source) {
+    let mut a = Access::default();
+    a.tree(&dir(&src.title_id), 0o777, 0o444);
+    match src.kind {
+        Kind::Pkg => {
+            if let Ok(m) = fs::symlink_metadata(&src.path) {
+                a.entry(&src.path, &m, 0, 0o444);
+            }
+            if let Some(parent) = src.path.parent() {
+                if let Ok(m) = fs::symlink_metadata(parent) {
+                    a.entry(parent, &m, 0o555, 0);
+                }
+            }
+        }
+        Kind::Folder(_) => a.tree(&src.path, 0o555, 0o444),
+    }
+    if a.fixed + a.failed == 0 {
+        return;
+    }
+    let first = a.first.map_or(String::new(), |(p, e)| format!("; first failure {}: {e}", p.display()));
+    log!("{}: access ({}): {} modes fixed, {} failed{first}", src.title_id, src.path.display(), a.fixed, a.failed);
+}
+
 /// The backport's lib dir in SMP order (sm_fakelib.c resolve_game_fakelib_source_for_path):
 /// fakelib2 (exclusive), then fakelib.
 fn bp_lib(src: &Source) -> Option<PathBuf> {
@@ -332,9 +422,14 @@ fn lib_dir(src: &Source) -> Option<PathBuf> {
     })
 }
 
+/// The cache layout version in the stamp. 2: the pkg reader also extracts container-only sce_sys
+/// files (save_data.png, pic0/pic1, snd0.at9, trophy00.ucp, nptitle.dat, npbind.dat), and files the
+/// index cannot map are extracted; every v1 cache rebuilds once.
+const STAMP_V: u64 = 2;
+
 pub fn stamp(src: &Source, s: &Settings) -> serde_json::Value {
     let mut st = serde_json::json!({
-        "v": 1,
+        "v": STAMP_V,
         "kind": if src.kind == Kind::Pkg { "pkg" } else { "folder" },
         "source": src.path.to_string_lossy(),
         "size": src.size,
@@ -351,14 +446,17 @@ pub fn stamp(src: &Source, s: &Settings) -> serde_json::Value {
     st
 }
 
-/// The ampr dir for title `tid`: its AMPR_TITLES_DIR entry when that is a dir, else AMPR_DIR.
-pub fn ampr_dir(tid: &str) -> PathBuf {
+/// The ampr dir for title `tid`: its AMPR_TITLES_DIR entry when that is a dir, else AMPR_DEBUG_DIR
+/// when the title is in `ampr_debug_titles` and the debug build is installed, else AMPR_DIR.
+pub fn ampr_dir(s: &Settings, tid: &str) -> PathBuf {
     let own = Path::new(AMPR_TITLES_DIR).join(tid);
     if own.is_dir() {
-        own
-    } else {
-        PathBuf::from(AMPR_DIR)
+        return own;
     }
+    if s.ampr_debug_titles.iter().any(|t| t == tid) && Path::new(AMPR_DEBUG_DIR).join("libSceAmpr.sprx").is_file() {
+        return PathBuf::from(AMPR_DEBUG_DIR);
+    }
+    PathBuf::from(AMPR_DIR)
 }
 
 /// Whether an ng `libSceAmpr.sprx` serves pkg games: ng's pkg mode opens `/app0/kraken.image`, a
@@ -505,7 +603,7 @@ fn ampr_state(s: &Settings, tid: &str) -> serde_json::Value {
         return serde_json::Value::Null;
     }
     let mut m = serde_json::Map::new();
-    let from = ampr_dir(tid);
+    let from = ampr_dir(s, tid);
     if from != Path::new(AMPR_DIR) {
         // A switch between AMPR_DIR and the title's own dir recomposes fakelib/ even when the
         // files look the same.
@@ -532,6 +630,10 @@ pub fn check(src: &Source, s: &Settings) -> Fresh {
     let old: serde_json::Value =
         fs::read(&done).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
     let new = stamp(src, s);
+    // An older layout rebuilds, moved or not (only_moved would refuse it too: "v" differs).
+    if old.get("v") != new.get("v") {
+        return Fresh::Stale(format!("cache layout v{} -> v{STAMP_V}", old.get("v").unwrap_or(&serde_json::Value::Null)));
+    }
     if old.get("source") != new.get("source") {
         if let Some(from) = old["source"].as_str().map(PathBuf::from) {
             let exists = fs::symlink_metadata(&from).is_ok();
@@ -569,7 +671,7 @@ pub fn check(src: &Source, s: &Settings) -> Fresh {
         .and_then(|b| serde_json::from_slice(&b).ok())
         .unwrap_or_default();
     if had != ampr_state(s, &src.title_id) {
-        return Fresh::Fakelib(format!("{} or inject_ampr changed", ampr_dir(&src.title_id).display()));
+        return Fresh::Fakelib(format!("{} or inject_ampr changed", ampr_dir(s, &src.title_id).display()));
     }
     Fresh::Fresh
 }
@@ -635,7 +737,7 @@ fn compose_fakelib(src: &Source, s: &Settings, pkg: Option<(&Io, &Pkg)>) -> Resu
     // next check and refreshes fakelib again, instead of being recorded as already copied.
     let state = ampr_state(s, &src.title_id);
     if s.inject_ampr {
-        copy_flat(&ampr_dir(&src.title_id), &fakelib, ampr_copied)?;
+        copy_flat(&ampr_dir(s, &src.title_id), &fakelib, ampr_copied)?;
     }
     fs::write(dir.join(AMPR_STATE), state.to_string())
 }
@@ -736,6 +838,114 @@ pub fn relink(src: &Source, s: &Settings, from: &Path) -> Result<()> {
     })
 }
 
+/// How `e` enters the cache: its index entry, and whether it was extracted whole (and if so its
+/// unpackable (files, bytes) tally, 0/0 unless the index could not map it). The per-file body of
+/// the pkg build, run in parallel across `build_pkg_files`'s worker threads (`io`/`p` are shared
+/// read-only; a thread owns `buf`). No side effects but the extracted file and a sparse-hole log.
+fn plan_entry<R: PRead>(
+    p: &Pkg,
+    io: &R,
+    e: &Entry,
+    s: &Settings,
+    dir: &Path,
+    title: &str,
+    buf: &mut [u8],
+) -> Result<(String, IndexFile, u64, u64)> {
+    let lower = e.path.to_ascii_lowercase();
+    let mut unpackable = (0u64, 0u64);
+    // A file stays in the pkg when the index can describe its blocks (a sparse hole is a
+    // zero chunk, ampr_index). ponytail: any other file is extracted whole to the internal
+    // SSD (its size, holes included): sparse holes off its 256 KiB block grid, or a short
+    // compressed block running past its end (packers such as ps5-dump-forge put several
+    // small files in one block; issue #52: Astro Bot, 4668 of 156246 files, 19 MB).
+    // extract_media: a video is already compressed; loose, the kernel reads it (AvPlayer,
+    // mmap) with no ng read path in between.
+    let packed = if extracted(e.path) || (s.extract_media && ampr_index::video_file(e.path)) {
+        None
+    } else {
+        // blocks() refuses (Unsupported only) a file whose data starts inside a block
+        // shared with the file before it: extracted too, read_at decodes it.
+        let c = if p.blocks(e).is_ok() { Some(chunks(p, e)?) } else { None };
+        if let Some(c) = c.filter(|c| ampr_index::packable(e.size, c)) {
+            Some(c)
+        } else if p.has_sparse(e) {
+            log!("{}: {}: sparse holes off the 256 KiB grid, extracting {} bytes", title, e.path, e.size);
+            None
+        } else {
+            unpackable = (1, e.size);
+            None
+        }
+    };
+    if packed.is_none() {
+        extract(p, io, e, &dir.join(e.path), buf)?;
+    }
+    let f = IndexFile { path: e.path.to_string(), size: e.size, chunks: packed };
+    Ok((lower, f, unpackable.0, unpackable.1))
+}
+
+/// Internal-SSD worker threads a pkg build may extract files on at once. The source is one pkg
+/// file read by offset (thread-safe pread), so concurrent extraction overlaps decode and I/O;
+/// capped low so a slow USB source is not thrashed and transient buffers stay bounded (CHUNK each).
+const BUILD_THREADS_MAX: usize = 4;
+
+/// Runs `plan_entry` over `entries` on up to BUILD_THREADS_MAX threads, returns the index entries
+/// (order independent: `build_inner` sorts them) and the summed unpackable (files, bytes). The
+/// first error from any thread is returned and the rest wind down. Serial fallback for one entry.
+fn build_pkg_files<R: PRead + Sync>(
+    p: &Pkg,
+    io: &R,
+    entries: &[Entry],
+    s: &Settings,
+    dir: &Path,
+    title: &str,
+) -> Result<(Vec<(String, IndexFile)>, (u64, u64))> {
+    use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering::Relaxed};
+    use std::sync::Mutex;
+    let threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1)
+        .clamp(1, BUILD_THREADS_MAX)
+        .min(entries.len().max(1));
+    let cursor = AtomicUsize::new(0);
+    let un_files = AtomicU64::new(0);
+    let un_bytes = AtomicU64::new(0);
+    let err: Mutex<Option<Error>> = Mutex::new(None);
+    let out: Mutex<Vec<(String, IndexFile)>> = Mutex::new(Vec::with_capacity(entries.len()));
+    std::thread::scope(|scope| {
+        for _ in 0..threads {
+            scope.spawn(|| {
+                let mut buf = vec![0u8; CHUNK];
+                loop {
+                    if err.lock().unwrap_or_else(|e| e.into_inner()).is_some() {
+                        return;
+                    }
+                    let i = cursor.fetch_add(1, Relaxed);
+                    let Some(e) = entries.get(i) else { return };
+                    match plan_entry(p, io, e, s, dir, title, &mut buf) {
+                        Ok((lower, f, uf, ub)) => {
+                            un_files.fetch_add(uf, Relaxed);
+                            un_bytes.fetch_add(ub, Relaxed);
+                            out.lock().unwrap_or_else(|e| e.into_inner()).push((lower, f));
+                        }
+                        Err(e2) => {
+                            let mut slot = err.lock().unwrap_or_else(|e| e.into_inner());
+                            if slot.is_none() {
+                                *slot = Some(e2);
+                            }
+                            return;
+                        }
+                    }
+                }
+            });
+        }
+    });
+    if let Some(e) = err.into_inner().unwrap_or_else(|e| e.into_inner()) {
+        return Err(e);
+    }
+    let files = out.into_inner().unwrap_or_else(|e| e.into_inner());
+    Ok((files, (un_files.load(Relaxed), un_bytes.load(Relaxed))))
+}
+
 fn build_inner(src: &Source, s: &Settings, before: &HashSet<PathBuf>) -> Result<()> {
     let start = SystemTime::now();
     let is_pkg = src.kind == Kind::Pkg;
@@ -743,7 +953,8 @@ fn build_inner(src: &Source, s: &Settings, before: &HashSet<PathBuf>) -> Result<
     let mut files: BTreeMap<String, IndexFile> = BTreeMap::new();
     let pkg = if is_pkg { Some(open(&src.path)?) } else { None };
     if let Some((io, p)) = &pkg {
-        let mut buf = vec![0u8; CHUNK];
+        // Game files to plan, in one pass (the forbidden-index checks must run before any work).
+        let mut entries = Vec::new();
         for e in p.files().filter(|e| !e.is_dir) {
             let lower = e.path.to_ascii_lowercase();
             // dump-forge always puts a fresh ampr_emu.index (loose files only) into a pkg: ours replaces it.
@@ -761,28 +972,21 @@ fn build_inner(src: &Source, s: &Settings, before: &HashSet<PathBuf>) -> Result<
             if LIB_DIRS.iter().any(|d| lower.starts_with(d)) {
                 continue;
             }
-            // A file with sparse holes stays in the pkg: its holes are zero chunks (ampr_index).
-            // ponytail: one whose holes do not start and end on its 256 KiB block grid cannot be
-            // indexed and is extracted whole to the internal SSD (its size, holes included).
-            // extract_media: a video is already compressed; loose, the kernel reads it (AvPlayer,
-            // mmap) with no ng read path in between.
-            let packed = if extracted(e.path) || (s.extract_media && ampr_index::video_file(e.path)) {
-                None
-            } else if p.has_sparse(&e) {
-                let c = chunks(p, &e)?;
-                if ampr_index::packable(e.size, &c) {
-                    Some(c)
-                } else {
-                    log!("{}: {}: sparse holes off the 256 KiB grid, extracting {} bytes", src.title_id, e.path, e.size);
-                    None
-                }
-            } else {
-                Some(chunks(p, &e)?)
-            };
-            if packed.is_none() {
-                extract(p, io, &e, &dir.join(e.path), &mut buf)?;
-            }
-            files.insert(lower, IndexFile { path: e.path.to_string(), size: e.size, chunks: packed });
+            entries.push(e);
+        }
+        // Plan and extract the files in parallel (build_pkg_files); the index is sorted below.
+        let (planned, unpackable) = build_pkg_files(p, io, &entries, s, &dir, &src.title_id)?;
+        for (lower, f) in planned {
+            files.insert(lower, f);
+        }
+        if unpackable.0 > 0 {
+            log!(
+                "{}: {} files in compressed blocks the index cannot map (shared or short), extracted {} bytes from {}",
+                src.title_id,
+                unpackable.0,
+                unpackable.1,
+                src.path.display()
+            );
         }
     }
     compose_fakelib(src, s, pkg.as_ref().map(|(io, p)| (io, p)))?;

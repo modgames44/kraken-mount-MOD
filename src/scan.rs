@@ -212,7 +212,7 @@ pub fn scan(roots: &[String], backports: bool) -> ScanResult {
                 continue;
             }
             let source = Source {
-                drive: crate::storage::drive_of(&path),
+                drive: crate::storage::drive_of(&crate::image::image_of(&path).unwrap_or_else(|| path.clone())),
                 backport: if backports { backport_for(root, roots, &title_id) } else { None },
                 path, kind, title_id, title_name, version, size,
             };

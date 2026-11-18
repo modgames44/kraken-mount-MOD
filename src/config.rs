@@ -25,6 +25,9 @@ pub struct Settings {
     /// publishes its own libSceAmpr.sprx points it at itself, so an upstream release does not
     /// replace the fork's build.
     pub ampr_update_repo: String,
+    /// Title ids that get the bundled debug ng (`libSceAmpr-debug.sprx`): /metrics on port 9090,
+    /// saved by the launch watcher to /data/krakenmount/debug/<TID>/ while the game runs.
+    pub ampr_debug_titles: Vec<String>,
 }
 
 impl Default for Settings {
@@ -42,6 +45,7 @@ impl Default for Settings {
             extract_media: false,
             pkg_profile: true,
             ampr_update_repo: DEFAULT_UPDATE_REPO.to_string(),
+            ampr_debug_titles: Vec::new(),
         }
     }
 }
@@ -60,6 +64,7 @@ const HELP: &[(&str, &str)] = &[
     ("extract_media", "true = pkg games: copy video files (.bk2 .usm .mp4 ...) out of the pkg into the cache (rebuilds pkg caches; uses more internal SSD space)"),
     ("pkg_profile", "true = pkg games: ng keeps one decode worker for small reads (audio/video streams)"),
     ("ampr_update_repo", "GitHub owner/repo whose latest release ampr_auto_update installs (a fork: its own repo)"),
+    ("ampr_debug_titles", "array of title ids that run the bundled debug ampr-emu-ng; reports in /data/krakenmount/debug/<TID>/"),
 ];
 
 /// The auto-update source of upstream kraken-mount.
@@ -69,6 +74,12 @@ pub const DEFAULT_UPDATE_REPO: &str = "quer3q/ampr-emu-ng";
 fn valid_repo(v: &str) -> bool {
     let ok = |p: &str| !p.is_empty() && p.len() <= 100 && p != "." && p != ".." && p.bytes().all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b));
     matches!(v.split_once('/'), Some((o, r)) if ok(o) && ok(r))
+}
+
+/// A PS5 title id: 4 letters, 5 digits (PPSA01234, CUSA01234).
+pub fn valid_tid(v: &str) -> bool {
+    let b = v.as_bytes();
+    b.len() == 9 && b[..4].iter().all(u8::is_ascii_alphabetic) && b[4..].iter().all(u8::is_ascii_digit)
 }
 
 fn flag(v: &str) -> Result<bool, String> {
@@ -110,6 +121,13 @@ fn set(s: &mut Settings, key: &str, v: &str) -> Result<(), String> {
         "debug" => s.debug = flag(v)?,
         "extract_media" => s.extract_media = flag(v)?,
         "pkg_profile" => s.pkg_profile = flag(v)?,
+        "ampr_debug_titles" if valid_tid(v) => {
+            let v = v.to_ascii_uppercase();
+            if !s.ampr_debug_titles.contains(&v) {
+                s.ampr_debug_titles.push(v);
+            }
+        }
+        "ampr_debug_titles" => return Err(format!("expected a title id like PPSA01234, got {v:?}")),
         "ampr_update_repo" if valid_repo(v) => s.ampr_update_repo = v.to_string(),
         "ampr_update_repo" => return Err(format!("expected owner/repo, got {v:?}")),
         _ => return Err("unknown key".into()),
@@ -235,6 +253,8 @@ fn parse(text: &str) -> Settings {
         let r = toml_value(&v).and_then(|vals| {
             if k == "scanpath" {
                 s.scan_paths.clear(); // the array replaces the defaults (and an earlier scanpath line)
+            } else if k == "ampr_debug_titles" {
+                s.ampr_debug_titles.clear();
             } else if vals.len() != 1 {
                 return Err("expected one value, not an array".into());
             }
@@ -268,6 +288,10 @@ fn render(s: &Settings) -> String {
             "extract_media" => out += &format!("{k} = {}\n", s.extract_media),
             "pkg_profile" => out += &format!("{k} = {}\n", s.pkg_profile),
             "ampr_update_repo" => out += &format!("{k} = {}\n", toml_quote(&s.ampr_update_repo)),
+            "ampr_debug_titles" => {
+                let items: Vec<String> = s.ampr_debug_titles.iter().map(|t| toml_quote(t)).collect();
+                out += &format!("{k} = [{}]\n", items.join(", "));
+            }
             _ => out += &format!("{k} = {}\n", s.debug),
         }
     }
@@ -317,6 +341,7 @@ pub fn to_json(s: &Settings) -> Value {
         "extract_media": s.extract_media,
         "pkg_profile": s.pkg_profile,
         "ampr_update_repo": s.ampr_update_repo,
+        "ampr_debug_titles": s.ampr_debug_titles,
     })
 }
 
@@ -326,8 +351,8 @@ pub fn from_json(v: &Value) -> Result<Settings, String> {
     let mut s = Settings::default();
     for (k, val) in obj {
         let vals: Vec<&Value> = match (k.as_str(), val) {
-            ("scanpath", Value::Array(a)) => a.iter().collect(),
-            ("scanpath", _) => return Err("scanpath: expected an array of strings".into()),
+            ("scanpath" | "ampr_debug_titles", Value::Array(a)) => a.iter().collect(),
+            ("scanpath" | "ampr_debug_titles", _) => return Err(format!("{k}: expected an array of strings")),
             _ => vec![val],
         };
         for x in vals {

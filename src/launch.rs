@@ -601,6 +601,74 @@ pub fn watch(titles: Arc<Mutex<HashSet<String>>>, running: Arc<Mutex<HashSet<Str
     }
 }
 
+/// Reports of the debug ng saved per title (cache::DEBUG_REPORTS_DIR/<TID>/): GET path, file.
+const DEBUG_PAGES: [(&str, &str); 2] = [("/metrics", "metrics.txt"), ("/fsfail", "fsfail.txt")];
+const DEBUG_PORT: u16 = 9090;
+const DEBUG_EVERY: Duration = Duration::from_secs(5);
+
+/// While process `pid` (title `tid`, running the debug ng) lives: every DEBUG_EVERY saves its
+/// /metrics and /fsfail, the first metrics answer also as metrics-start.txt (a baseline to compare
+/// with); after the exit, copies ng's status and trace files beside them. One thread per launch.
+fn capture_debug(tid: String, pid: i32) {
+    let spawned = std::thread::Builder::new().name("km-debug".into()).spawn(move || {
+        let dir = std::path::Path::new(crate::cache::DEBUG_REPORTS_DIR).join(&tid);
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            tlog!("{tid} debug: create {}: {e}", dir.display());
+            return;
+        }
+        let _ = std::fs::remove_file(dir.join("metrics-start.txt"));
+        tlog!("{tid} debug: saving ampr-emu-ng reports to {} while pid {pid} runs", dir.display());
+        let mut saved = 0u32;
+        while unsafe { libc::kill(pid, 0) } == 0 {
+            std::thread::sleep(DEBUG_EVERY);
+            for (page, name) in DEBUG_PAGES {
+                let Ok(body) = local_get(DEBUG_PORT, page) else { continue };
+                if page == "/metrics" && saved == 0 {
+                    let _ = write_replace(&dir, "metrics-start.txt", &body);
+                }
+                if write_replace(&dir, name, &body).is_ok() && page == "/metrics" {
+                    saved += 1;
+                }
+            }
+        }
+        for (src, name) in [("/data/ampr_emu_status.txt", "status.txt"), ("/data/ampr_emu_trace.txt", "trace.txt")] {
+            let _ = std::fs::copy(src, dir.join(name));
+        }
+        tlog!("{tid} debug: pid {pid} ended; {saved} metrics snapshots in {}", dir.display());
+    });
+    if let Err(e) = spawned {
+        tlog!("debug: thread: {e}");
+    }
+}
+
+/// `name` in `dir` replaced whole (temp file + rename): a reader never sees half a snapshot.
+fn write_replace(dir: &std::path::Path, name: &str, body: &[u8]) -> io::Result<()> {
+    let tmp = dir.join(format!(".{name}.tmp"));
+    std::fs::write(&tmp, body)?;
+    std::fs::rename(&tmp, dir.join(name))
+}
+
+/// GET `path` from 127.0.0.1:`port` (HTTP/1.0), the body after the headers. 3 s timeouts.
+fn local_get(port: u16, path: &str) -> io::Result<Vec<u8>> {
+    use std::io::{Read, Write};
+    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+    let mut c = std::net::TcpStream::connect_timeout(&addr, Duration::from_secs(3))?;
+    c.set_read_timeout(Some(Duration::from_secs(3)))?;
+    c.set_write_timeout(Some(Duration::from_secs(3)))?;
+    c.write_all(format!("GET {path} HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n").as_bytes())?;
+    let mut buf = Vec::new();
+    c.take(4 << 20).read_to_end(&mut buf)?;
+    Ok(http_body(buf))
+}
+
+/// The body of an HTTP answer (after the first blank line); the whole buffer when it has none.
+fn http_body(buf: Vec<u8>) -> Vec<u8> {
+    match buf.windows(4).position(|w| w == b"\r\n\r\n") {
+        Some(i) if buf.starts_with(b"HTTP/") => buf[i + 4..].to_vec(),
+        _ => buf,
+    }
+}
+
 /// What ng's status file says about one launch (`parse_ng_status`).
 #[derive(Debug, PartialEq)]
 struct NgStatus {
@@ -923,6 +991,10 @@ impl Watcher {
             if !s.srcs.is_empty() && crate::cache::fakelib_ng_writes_status(tid) {
                 s.ng_check = Some((now_ms() + NG_CHECK_MS, std::time::SystemTime::now()));
             }
+            // The debug ng serves /metrics on port 9090: saved while the game runs.
+            if !s.srcs.is_empty() && crate::cache::fakelib_ng_is_debug(tid) {
+                capture_debug(tid.to_string(), pid);
+            }
             // SMP register_game_exit_watch: EV_ADD replaces the tracked knote's fflags.
             let k = kev(pid as usize, libc::EVFILT_PROC, libc::EV_ADD | libc::EV_ENABLE | libc::EV_CLEAR, libc::NOTE_EXIT as u32);
             if let Err(e) = kevent_add(self.kq, k) {
@@ -982,6 +1054,12 @@ impl Watcher {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn http_body_strips_headers_only_from_http_answers() {
+        assert_eq!(http_body(b"HTTP/1.0 200 OK\r\nA: b\r\n\r\nx 1\n".to_vec()), b"x 1\n");
+        assert_eq!(http_body(b"x 1\n".to_vec()), b"x 1\n");
+    }
 
     #[test]
     fn ng_status_parses_and_reports_problems() {

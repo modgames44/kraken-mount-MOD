@@ -10,7 +10,12 @@ if [[ "${1:-}" != --inside ]]; then
 fi
 
 # The bundled ampr-emu-ng must be the released file (SHA256SUMS copied from its GitHub release).
-(cd vendor/ampr-emu-ng && sha256sum -c --ignore-missing --strict SHA256SUMS)
+# A local ampr-emu-ng build: ./ps5/vendor-ampr.sh <ampr-emu-ng dir> copies it and rewrites SHA256SUMS.
+if ! (cd vendor/ampr-emu-ng && sha256sum -c --ignore-missing --strict SHA256SUMS); then
+  echo "build: vendor/ampr-emu-ng does not match its SHA256SUMS." >&2
+  echo "build: after building ampr-emu-ng, run: ./ps5/vendor-ampr.sh <path to ampr-emu-ng-main>" >&2
+  exit 1
+fi
 
 out=target/ps5
 cc="$PS5_PAYLOAD_SDK/bin/prospero-clang"

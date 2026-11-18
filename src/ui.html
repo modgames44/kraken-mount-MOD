@@ -440,6 +440,7 @@ button:disabled { opacity: 0.5; cursor: default; }
     <label class="row"><span class="lbl" data-i18n="injectAmpr">Inject ampr-emu-ng into every game's fakelib</span><input type="checkbox" id="f_inject_ampr"></label>
     <label class="row"><span class="lbl" data-i18n="amprAutoUpdate">Auto-update ampr-emu-ng (checked once at start)</span><input type="checkbox" id="f_ampr_auto_update"></label>
     <label class="row"><span class="lbl" data-i18n="amprUpdateRepo">Update source (GitHub owner/repo)</span><input type="text" id="f_ampr_update_repo" spellcheck="false"></label>
+    <label class="row"><span class="lbl" data-i18n="amprDebugTitles">Debug ampr-emu-ng for these games (title ids, reports at /api/debug/&lt;TID&gt;/metrics.txt)</span><input type="text" id="f_ampr_debug_titles" spellcheck="false" placeholder="PPSA01234 PPSA05678"></label>
     <div class="row"><span><span class="lbl" id="amprstatus">ampr-emu-ng</span><span class="hint" id="amprmsg"></span></span><button id="amprupdate" type="button" data-i18n="amprUpdateNow">Update ampr-emu-ng now</button></div>
     <label class="row"><span class="lbl" data-i18n="backports">Apply backports</span><input type="checkbox" id="f_backports"></label>
     <label class="row"><span class="lbl" data-i18n="extractMedia">pkg: copy videos out of the pkg (more SSD space, smoother cutscenes)</span><input type="checkbox" id="f_extract_media"></label>
@@ -574,6 +575,7 @@ var MSG = {
     injectAmpr: "Inject ampr-emu-ng into every game's fakelib",
     amprAutoUpdate: 'Auto-update ampr-emu-ng (checked once at start)',
     amprUpdateRepo: "Update source (GitHub owner/repo)",
+    amprDebugTitles: "Debug ampr-emu-ng for these games (title ids, reports at /api/debug/<TID>/metrics.txt)",
     amprUpdateNow: "Update ampr-emu-ng now",
     amprUpdating: "Updating ampr-emu-ng...",
     amprBundled: "bundled",
@@ -654,6 +656,7 @@ var MSG = {
     injectAmpr: 'Внедрять ampr-emu-ng в fakelib каждой игры',
     amprAutoUpdate: 'Автообновление ampr-emu-ng (проверка один раз при запуске)',
     amprUpdateRepo: "Источник обновлений (GitHub owner/repo)",
+    amprDebugTitles: "Отладочный ampr-emu-ng для этих игр (ID игр, отчёты в /api/debug/<TID>/metrics.txt)",
     amprUpdateNow: "Обновить ampr-emu-ng сейчас",
     amprUpdating: "Обновление ampr-emu-ng...",
     amprBundled: "встроенный",
@@ -734,6 +737,7 @@ var MSG = {
     injectAmpr: '将 ampr-emu-ng 注入每个游戏的 fakelib',
     amprAutoUpdate: '自动更新 ampr-emu-ng（启动时检查一次）',
     amprUpdateRepo: "更新来源（GitHub owner/repo）",
+    amprDebugTitles: "以下游戏使用调试版 ampr-emu-ng（游戏 ID，报告见 /api/debug/<TID>/metrics.txt）",
     amprUpdateNow: "立即更新 ampr-emu-ng",
     amprUpdating: "正在更新 ampr-emu-ng...",
     amprBundled: "内置",
@@ -814,6 +818,7 @@ var MSG = {
     injectAmpr: 'ampr-emu-ng in die fakelib jedes Spiels einfügen',
     amprAutoUpdate: 'ampr-emu-ng automatisch aktualisieren (einmal beim Start geprüft)',
     amprUpdateRepo: "Update-Quelle (GitHub owner/repo)",
+    amprDebugTitles: "Debug-ampr-emu-ng für diese Spiele (Titel-IDs, Berichte unter /api/debug/<TID>/metrics.txt)",
     amprUpdateNow: "ampr-emu-ng jetzt aktualisieren",
     amprUpdating: "ampr-emu-ng wird aktualisiert...",
     amprBundled: "mitgeliefert",
@@ -894,6 +899,7 @@ var MSG = {
     injectAmpr: 'Inyectar ampr-emu-ng en la fakelib de cada juego',
     amprAutoUpdate: 'Actualizar ampr-emu-ng automáticamente (se comprueba una vez al iniciar)',
     amprUpdateRepo: "Origen de actualizaciones (GitHub owner/repo)",
+    amprDebugTitles: "ampr-emu-ng de depuración para estos juegos (ID de título, reportes en /api/debug/<TID>/metrics.txt)",
     amprUpdateNow: "Actualizar ampr-emu-ng ahora",
     amprUpdating: "Actualizando ampr-emu-ng...",
     amprBundled: "incluido",
@@ -974,6 +980,7 @@ var MSG = {
     injectAmpr: 'Injecter ampr-emu-ng dans la fakelib de chaque jeu',
     amprAutoUpdate: 'Mettre à jour ampr-emu-ng automatiquement (vérifié une fois au démarrage)',
     amprUpdateRepo: "Source des mises à jour (GitHub owner/repo)",
+    amprDebugTitles: "ampr-emu-ng de débogage pour ces jeux (ID de titre, rapports dans /api/debug/<TID>/metrics.txt)",
     amprUpdateNow: "Mettre à jour ampr-emu-ng maintenant",
     amprUpdating: "Mise à jour d'ampr-emu-ng...",
     amprBundled: "intégré",
@@ -1054,6 +1061,7 @@ var MSG = {
     injectAmpr: 'すべてのゲームの fakelib に ampr-emu-ng を組み込む',
     amprAutoUpdate: 'ampr-emu-ng を自動更新（起動時に一度確認）',
     amprUpdateRepo: "更新元（GitHub owner/repo）",
+    amprDebugTitles: "これらのゲームでデバッグ版 ampr-emu-ng を使用（タイトル ID、レポートは /api/debug/<TID>/metrics.txt）",
     amprUpdateNow: "今すぐ ampr-emu-ng を更新",
     amprUpdating: "ampr-emu-ng を更新中...",
     amprBundled: "同梱",
@@ -1134,6 +1142,7 @@ var MSG = {
     injectAmpr: 'Injetar ampr-emu-ng na fakelib de cada jogo',
     amprAutoUpdate: 'Atualizar o ampr-emu-ng automaticamente (verificado uma vez ao iniciar)',
     amprUpdateRepo: "Origem das atualizações (GitHub owner/repo)",
+    amprDebugTitles: "ampr-emu-ng de depuração para estes jogos (IDs de título, relatórios em /api/debug/<TID>/metrics.txt)",
     amprUpdateNow: "Atualizar o ampr-emu-ng agora",
     amprUpdating: "Atualizando o ampr-emu-ng...",
     amprBundled: "incluído",
@@ -1214,6 +1223,7 @@ var MSG = {
     injectAmpr: 'Inserisci ampr-emu-ng nella fakelib di ogni gioco',
     amprAutoUpdate: "Aggiorna automaticamente ampr-emu-ng (controllato una volta all'avvio)",
     amprUpdateRepo: "Origine degli aggiornamenti (GitHub owner/repo)",
+    amprDebugTitles: "ampr-emu-ng di debug per questi giochi (ID titolo, report in /api/debug/<TID>/metrics.txt)",
     amprUpdateNow: "Aggiorna ampr-emu-ng ora",
     amprUpdating: "Aggiornamento di ampr-emu-ng...",
     amprBundled: "incluso",
@@ -1294,6 +1304,7 @@ var MSG = {
     injectAmpr: '모든 게임의 fakelib에 ampr-emu-ng 삽입',
     amprAutoUpdate: 'ampr-emu-ng 자동 업데이트 (시작 시 한 번 확인)',
     amprUpdateRepo: "업데이트 소스 (GitHub owner/repo)",
+    amprDebugTitles: "이 게임에 디버그 ampr-emu-ng 사용 (타이틀 ID, 보고서는 /api/debug/<TID>/metrics.txt)",
     amprUpdateNow: "지금 ampr-emu-ng 업데이트",
     amprUpdating: "ampr-emu-ng 업데이트 중...",
     amprBundled: "내장",
@@ -1374,6 +1385,7 @@ var MSG = {
     injectAmpr: 'حقن ampr-emu-ng في fakelib لكل لعبة',
     amprAutoUpdate: 'تحديث ampr-emu-ng تلقائيًا (يُفحص مرة واحدة عند البدء)',
     amprUpdateRepo: "مصدر التحديثات (GitHub owner/repo)",
+    amprDebugTitles: "ampr-emu-ng للتصحيح لهذه الألعاب (معرّفات العناوين، التقارير في /api/debug/<TID>/metrics.txt)",
     amprUpdateNow: "تحديث ampr-emu-ng الآن",
     amprUpdating: "جارٍ تحديث ampr-emu-ng...",
     amprBundled: "مضمّن",
@@ -1997,6 +2009,7 @@ var settingsRequest = 0;
 function fillSettings(v) {
   $('f_scanpath').value = (v.scanpath || []).join('\n');
   $('f_ampr_update_repo').value = v.ampr_update_repo || '';
+  $('f_ampr_debug_titles').value = (v.ampr_debug_titles || []).join(' ');
   BOOLS.forEach(function (k) { $('f_' + k).checked = v[k] === true || v[k] === 1; });
   NUMS.forEach(function (k) { $('f_' + k).value = v[k] == null ? '' : v[k]; });
 }
@@ -2006,6 +2019,7 @@ function readSettings() {
   };
   var repo = $('f_ampr_update_repo').value.trim();
   if (repo) v.ampr_update_repo = repo;
+  v.ampr_debug_titles = $('f_ampr_debug_titles').value.split(/[\s,;]+/).map(function (x) { return x.trim().toUpperCase(); }).filter(Boolean);
   BOOLS.forEach(function (k) { v[k] = $('f_' + k).checked; });
   NUMS.forEach(function (k) { var n = parseInt($('f_' + k).value, 10); if (!isNaN(n)) v[k] = n; });
   return v;
