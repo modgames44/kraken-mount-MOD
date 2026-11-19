@@ -64,7 +64,7 @@ fn errno() -> i32 {
     io::Error::last_os_error().raw_os_error().unwrap_or(0)
 }
 
-fn c_field(buf: &[libc::c_char]) -> String {
+pub(crate) fn c_field(buf: &[libc::c_char]) -> String {
     let bytes: Vec<u8> = buf.iter().take_while(|&&c| c != 0).map(|&c| c as u8).collect();
     String::from_utf8_lossy(&bytes).into_owned()
 }
@@ -131,37 +131,61 @@ fn find_title_pid(tid: &str) -> Option<libc::pid_t> {
 }
 
 /// Walks sysctl KERN_PROC_PROC with the PS5 kinfo_proc offsets: first pid where `f(pid, tdname)`.
-fn proc_find(mut f: impl FnMut(libc::pid_t, &[u8]) -> bool) -> Option<libc::pid_t> {
+fn proc_find(f: impl FnMut(libc::pid_t, &[u8]) -> bool) -> Option<libc::pid_t> {
+    // A failed or malformed scan is indistinguishable from "not found" for callers that only
+    // want a pid; smp_running wants the difference, so it uses proc_scan directly.
+    proc_scan(f).unwrap_or(None)
+}
+
+/// Walks sysctl KERN_PROC_PROC with the PS5 kinfo_proc offsets, returning the first pid where
+/// `f(pid, tdname)`. Distinguishes `Ok(None)` (scanned, no match) from `Err(())` (the table could
+/// not be read or a record was malformed): a caller must not read `Err` as "process absent".
+/// Port of the "malformed/empty snapshots are unknown, never proof of absence" rule from TITAN
+/// CORE (stack_policy::dependency_presence, GPL-3.0-or-later); see CREDITS.md.
+fn proc_scan(mut f: impl FnMut(libc::pid_t, &[u8]) -> bool) -> Result<Option<libc::pid_t>, ()> {
     let mib = [libc::CTL_KERN, libc::KERN_PROC, libc::KERN_PROC_PROC, 0];
     let mut len = 0usize;
     let null = std::ptr::null_mut();
     if unsafe { libc::sysctl(mib.as_ptr(), 4, null, &mut len, std::ptr::null(), 0) } != 0 {
-        return None;
+        return Err(());
     }
     let mut buf = vec![0u8; len + len / 4];
     len = buf.len();
     let out = buf.as_mut_ptr() as *mut libc::c_void;
     if unsafe { libc::sysctl(mib.as_ptr(), 4, out, &mut len, std::ptr::null(), 0) } != 0 {
-        return None;
+        return Err(());
     }
     let buf = &buf[..len];
     let mut off = 0;
     while buf.len() - off >= 4 {
         let size = i32::from_ne_bytes(buf[off..off + 4].try_into().unwrap()) as usize;
         if size <= KINFO_TDNAME_OFFSET || size > buf.len() - off {
-            return None;
+            return Err(());
         }
         let ki = &buf[off..off + size];
         let pid = i32::from_ne_bytes(ki[KINFO_PID_OFFSET..KINFO_PID_OFFSET + 4].try_into().unwrap());
         let td = &ki[KINFO_TDNAME_OFFSET..];
         if let Some(n) = td.iter().position(|&b| b == 0) {
             if f(pid, &td[..n]) {
-                return Some(pid);
+                return Ok(Some(pid));
             }
         }
         off += size;
     }
-    None
+    Ok(None)
+}
+
+/// ShadowMount+ runs under this name; it mounts the same titles, so start-up waits for it to stop.
+pub const SMP_PROCESS: &str = "shadowmountplus.elf";
+
+/// Whether ShadowMount+ is running: `None` when the process table could not be read. Start-up
+/// treats `None` as "cannot confirm it is gone" and keeps waiting, rather than starting and
+/// fighting it for the same mounts.
+pub fn smp_running() -> Option<bool> {
+    match proc_scan(|_, td| td == SMP_PROCESS.as_bytes()) {
+        Ok(found) => Some(found.is_some()),
+        Err(()) => None,
+    }
 }
 
 /// SMP resolve_game_title_id: sceKernelGetAppInfo(pid).title_id, None while it is empty.
@@ -1046,7 +1070,11 @@ impl Watcher {
             }
         }
         for name in done {
-            self.sessions.remove(&name);
+            if let Some(s) = self.sessions.remove(&name) {
+                // SMP sm_game_lifecycle.c: the system rewrites snd0info while a title runs.
+                // On its own thread: a busy app.db must not hold the watcher up to 3 s.
+                crate::register::spawn_snd0info(&s.tid, 0);
+            }
         }
     }
 }

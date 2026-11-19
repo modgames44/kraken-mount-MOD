@@ -37,7 +37,39 @@ pub struct ScanResult {
     pub games: Vec<Source>,
     pub duplicates: Vec<Source>,
     pub errors: Vec<(PathBuf, String)>,
+    /// Sources still being copied (stability_wait_seconds): path and title id when known.
+    /// Skipped this pass, but not gone: the caller keeps their entry, registration and cache.
+    pub unstable: Vec<(PathBuf, Option<String>)>,
 }
+
+/// Seconds since the youngest max(mtime, ctime) of `paths` when that is under `wait` (SMP
+/// sm_stability.c); None = stable. A clock in the future (negative age) counts as stable, as in SMP.
+/// A path that cannot be stat'ed is ignored here (the scan reports it).
+pub fn still_written(paths: &[PathBuf], wait: u64) -> Option<u64> {
+    use std::os::unix::fs::MetadataExt;
+    if wait == 0 {
+        return None;
+    }
+    let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).ok()?.as_secs() as i64;
+    paths.iter().filter_map(|p| fs::metadata(p).ok())
+        .map(|m| now - m.mtime().max(m.ctime()))
+        .filter(|&age| (0..wait as i64).contains(&age))
+        .min()
+        .map(|age| age as u64)
+}
+
+/// Records an unstable source; logs it once until it is stable again.
+fn skip_unstable(result: &mut ScanResult, path: PathBuf, tid: Option<String>, age: u64) {
+    let logged = UNSTABLE.get_or_init(|| Mutex::new(HashSet::new()));
+    if logged.lock().unwrap_or_else(|e| e.into_inner()).insert(path.clone()) {
+        let label = tid.clone().unwrap_or_else(|| path.display().to_string());
+        log!("{label}: source still being written (changed {age} s ago), waiting");
+    }
+    result.unstable.push((path, tid));
+}
+
+/// Unstable sources already logged.
+static UNSTABLE: OnceLock<Mutex<HashSet<PathBuf>>> = OnceLock::new();
 
 type PkgParam = Result<(String, String, String), String>;
 type PkgMemo = HashMap<PathBuf, (u64, SystemTime, PkgParam)>;
@@ -93,16 +125,13 @@ fn backport_for(owner: &Path, roots: &[String], tid: &str) -> Option<PathBuf> {
     None
 }
 
-/// .pkg path -> TID of each pkg cache dir, from the "source" of its `.done` stamp.
-fn cached_pkgs() -> HashMap<PathBuf, String> {
+/// Source path (.pkg or folder) -> TID of each cache dir, from the "source" of its `.done` stamp.
+fn cached_sources() -> HashMap<PathBuf, String> {
     let Ok(rd) = fs::read_dir(crate::cache::CACHES) else { return HashMap::new() };
     rd.flatten()
         .filter_map(|e| {
             let tid = e.file_name().to_string_lossy().into_owned();
             let stamp: serde_json::Value = serde_json::from_slice(&fs::read(e.path().join(crate::cache::DONE)).ok()?).ok()?;
-            if stamp["kind"] != "pkg" {
-                return None;
-            }
             Some((PathBuf::from(stamp["source"].as_str()?), tid))
         })
         .collect()
@@ -136,14 +165,38 @@ fn scan_error(result: &mut ScanResult, path: PathBuf, error: impl std::fmt::Disp
     result.errors.push((path, message));
 }
 
+/// Duplicate rule: a folder beats a pkg; within a kind the first source in scan order wins and
+/// the others go to `duplicates`. A source still being copied (`source` None) claims its title id
+/// the same way, so a mid-copy winner keeps the other copy out of the library (an unstable
+/// loser claims nothing); it itself goes only to `unstable`.
+fn claim<T>(seen: &mut HashMap<String, (bool, Option<usize>)>, games: &mut Vec<Option<T>>,
+            duplicates: &mut Vec<T>, tid: &str, pkg: bool, source: Option<T>) {
+    match seen.get(tid) {
+        // The holder wins unless it is a pkg and this is a folder.
+        Some(&(held_pkg, _)) if !held_pkg || pkg => duplicates.extend(source),
+        held => {
+            if let Some(&(_, Some(i))) = held {
+                duplicates.extend(games[i].take());
+            }
+            let slot = source.map(|s| {
+                games.push(Some(s));
+                games.len() - 1
+            });
+            seen.insert(tid.to_string(), (pkg, slot));
+        }
+    }
+}
+
 /// Last logged scan error per path.
 static LOGGED: OnceLock<Mutex<HashMap<PathBuf, String>>> = OnceLock::new();
 
-pub fn scan(roots: &[String], backports: bool) -> ScanResult {
-    let mut result = ScanResult { games: Vec::new(), duplicates: Vec::new(), errors: Vec::new() };
-    // Title id -> its index in `result.games`.
-    let mut seen: HashMap<String, usize> = HashMap::new();
-    let cached = cached_pkgs();
+pub fn scan(roots: &[String], backports: bool, stability_wait: u64) -> ScanResult {
+    let mut result = ScanResult { games: Vec::new(), duplicates: Vec::new(), errors: Vec::new(), unstable: Vec::new() };
+    // Title id -> (winner is a pkg, its index in `games`; None while the winner is still being copied).
+    let mut seen: HashMap<String, (bool, Option<usize>)> = HashMap::new();
+    // A slot is emptied when a later source beats it.
+    let mut games: Vec<Option<Source>> = Vec::new();
+    let cached = cached_sources();
     for root in roots {
         let root = Path::new(root);
         let entries = match fs::read_dir(root) {
@@ -174,6 +227,16 @@ pub fn scan(roots: &[String], backports: bool) -> ScanResult {
             };
             let (kind, size, param) = if metadata.is_file()
                 && path.extension().is_some_and(|e| e.eq_ignore_ascii_case("pkg")) {
+                // Before the pkg is opened: a half-copied header is not parsed. The title id is
+                // the one of an earlier cache of this path, if any.
+                if let Some(age) = still_written(std::slice::from_ref(&path), stability_wait) {
+                    let tid = cached.get(&path).cloned();
+                    if let Some(t) = &tid {
+                        claim(&mut seen, &mut games, &mut result.duplicates, t, true, None);
+                    }
+                    skip_unstable(&mut result, path, tid, age);
+                    continue;
+                }
                 let mtime = match metadata.modified() {
                     Ok(mtime) => mtime,
                     Err(e) => {
@@ -188,6 +251,20 @@ pub fn scan(roots: &[String], backports: bool) -> ScanResult {
                 (Kind::Pkg, metadata.len(), param)
             } else if metadata.is_dir() && path.file_name().is_some_and(|n| n != "backports")
                 && path.join("eboot.bin").is_file() && path.join("sce_sys/param.json").is_file() {
+                // ponytail: only the folder itself, sce_sys/, its param.json and eboot.bin are checked, so
+                // a big file deep inside can still be in flight; a full walk per pass costs too much on USB.
+                let probe = [path.clone(), path.join("sce_sys"), path.join("sce_sys/param.json"), path.join("eboot.bin")];
+                if let Some(age) = still_written(&probe, stability_wait) {
+                    // A param.json mid-copy does not parse: the title id of an earlier cache of this path.
+                    let tid = fs::read(path.join("sce_sys/param.json")).ok()
+                        .and_then(|json| parse_param(&json).ok()).map(|(tid, _, _)| tid)
+                        .or_else(|| cached.get(&path).cloned());
+                    if let Some(t) = &tid {
+                        claim(&mut seen, &mut games, &mut result.duplicates, t, false, None);
+                    }
+                    skip_unstable(&mut result, path, tid, age);
+                    continue;
+                }
                 let packing = if path.join("ampr_zstd.index").is_file() {
                     Packing::Zstd
                 } else if path.join("ampr_assets.index").is_file() {
@@ -216,25 +293,21 @@ pub fn scan(roots: &[String], backports: bool) -> ScanResult {
                 backport: if backports { backport_for(root, roots, &title_id) } else { None },
                 path, kind, title_id, title_name, version, size,
             };
-            // A folder beats a pkg; within a kind the first scan root wins.
-            match seen.get(&source.title_id) {
-                None => {
-                    seen.insert(source.title_id.clone(), result.games.len());
-                    result.games.push(source);
-                }
-                Some(&i) if result.games[i].kind == Kind::Pkg && source.kind != Kind::Pkg => {
-                    let pkg = std::mem::replace(&mut result.games[i], source);
-                    result.duplicates.push(pkg);
-                }
-                Some(_) => result.duplicates.push(source),
-            }
+            let (tid, pkg) = (source.title_id.clone(), source.kind == Kind::Pkg);
+            claim(&mut seen, &mut games, &mut result.duplicates, &tid, pkg, Some(source));
         }
     }
+    result.games = games.into_iter().flatten().collect();
     result.games.sort_by(|a, b| a.title_name.cmp(&b.title_name));
     // A fixed error that comes back is logged again.
     if let Some(logged) = LOGGED.get() {
         let errors: HashSet<&PathBuf> = result.errors.iter().map(|(p, _)| p).collect();
         logged.lock().unwrap_or_else(|e| e.into_inner()).retain(|p, _| errors.contains(p));
+    }
+    // A source copied again later is logged again.
+    if let Some(logged) = UNSTABLE.get() {
+        let unstable: HashSet<&PathBuf> = result.unstable.iter().map(|(p, _)| p).collect();
+        logged.lock().unwrap_or_else(|e| e.into_inner()).retain(|p| unstable.contains(p));
     }
     result
 }
@@ -246,8 +319,10 @@ pub fn parse_param(json: &[u8]) -> io::Result<(String, String, String)> {
         return Err(Error::new(ErrorKind::InvalidData, format!("param.json: bad titleId {tid:?}")));
     }
     let lp = &v["localizedParameters"];
-    let name = lp["defaultLanguage"].as_str()
-        .and_then(|lang| lp[lang]["titleName"].as_str())
+    // ponytail: the console language at parse time; an unbuilt pkg's memoized name keeps the
+    // language of its first read until the pkg changes or the payload restarts.
+    let name = local_title(lp, crate::i18n::title_tag())
+        .or_else(|| lp["defaultLanguage"].as_str().and_then(|lang| lp[lang]["titleName"].as_str()))
         .filter(|name| !name.is_empty())
         .or_else(|| lp["en-US"]["titleName"].as_str().filter(|name| !name.is_empty()))
         .or_else(|| lp.as_object().and_then(|langs| langs.values()
@@ -255,6 +330,18 @@ pub fn parse_param(json: &[u8]) -> io::Result<(String, String, String)> {
         .unwrap_or(tid);
     Ok((tid.to_owned(), name.to_owned(), v["contentVersion"].as_str().unwrap_or_default().to_owned()))
 }
+/// The `localizedParameters` title for language tag `want`: that tag (any case), else the same
+/// language in another region (es-419 -> es-ES, en-GB -> en-US), as Dump Forge's gameTitle; blank
+/// names do not count.
+fn local_title<'a>(lp: &'a serde_json::Value, want: &str) -> Option<&'a str> {
+    let langs = lp.as_object()?;
+    let base = |t: &str| t.split('-').next().unwrap_or("").to_ascii_lowercase();
+    let name = |v: &'a serde_json::Value| v["titleName"].as_str().filter(|n| !n.trim().is_empty());
+    let titles = || langs.iter().filter(|(k, _)| *k != "defaultLanguage");
+    titles().find(|(k, _)| k.eq_ignore_ascii_case(want)).and_then(|(_, v)| name(v))
+        .or_else(|| titles().filter(|(k, _)| base(k) == base(want)).find_map(|(_, v)| name(v)))
+}
+
 /// Game title ids only: NPXS ids are system apps (SMP is_supported_game_title_id).
 pub fn valid_tid(t: &str) -> bool {
     let b = t.as_bytes();

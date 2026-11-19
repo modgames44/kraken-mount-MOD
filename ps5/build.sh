@@ -16,14 +16,21 @@ if ! (cd vendor/ampr-emu-ng && sha256sum -c --ignore-missing --strict SHA256SUMS
   echo "build: after building ampr-emu-ng, run: ./ps5/vendor-ampr.sh <path to ampr-emu-ng-main>" >&2
   exit 1
 fi
+# The bundled dlc_emu and pgo_stub (src/cache.rs EMUS) too.
+(cd vendor/dlc_emu && sha256sum -c --strict SHA256SUMS)
+(cd vendor/pgo_stub && sha256sum -c --strict SHA256SUMS)
 
 out=target/ps5
 cc="$PS5_PAYLOAD_SDK/bin/prospero-clang"
 mkdir -p "$out/shim"
-for src in ps5/shim/freebsd11.c ps5/shim/syscalls.S ps5/entry.c ps5/compat.c; do
+for src in ps5/shim/freebsd11.c ps5/shim/syscalls.S ps5/entry.c ps5/compat.c ps5/usb.c; do
   name=$(basename "${src%.*}")
   "$cc" -O2 -Wall -Wextra -Werror -c "$src" -o "$out/shim/$name.o"
 done
+"$cc" -O2 -Wall -Wextra -Werror -I/opt/sqlite -c ps5/appdb.c -o "$out/shim/appdb.o"
+# The SQLite amalgamation (Dockerfile) is third-party code: no -Werror.
+"$cc" -O2 -DSQLITE_THREADSAFE=1 -DSQLITE_OMIT_LOAD_EXTENSION -DSQLITE_DEFAULT_MEMSTATUS=0 \
+  -c /opt/sqlite/sqlite3.c -o "$out/shim/sqlite3.o"
 
 export RUSTC_BOOTSTRAP=1
 # The PS5 kernel fills FreeBSD 11 structs (stat 120 bytes, dirent 264, old statfs); libc and the

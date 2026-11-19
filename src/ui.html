@@ -139,7 +139,8 @@ button.shoulder:hover { color: var(--fg); }
   border-radius: 999px; font-size: 0.92rem; white-space: nowrap; min-width: 0; overflow: hidden;
 }
 .storage-pill b { font-weight: 600; }
-.storage-pill b, .storage-pill > span:last-child { flex: none; }
+.storage-pill b, .storage-pill > span:last-of-type, .storage-pill .eject { flex: none; }
+.storage-pill .eject { height: 2rem; padding: 0 0.8rem; }
 /* On one row with the filters: the meters give up width first when many drives are mounted. */
 .storage-pill .meter { min-width: 1.5rem; }
 .meter { width: 7rem; height: 0.4rem; border-radius: 999px; background: rgba(255, 255, 255, 0.16); overflow: hidden; }
@@ -309,6 +310,7 @@ button:disabled { opacity: 0.5; cursor: default; }
   box-shadow: var(--glass-edge), var(--glass-drop); overflow-wrap: break-word;
 }
 .banner.warn { background: rgba(125, 83, 26, 0.34); color: #fff0cf; }
+.banner.ok { background: var(--glass); color: var(--fg); }
 .banner.show { display: block; }
 .banner:first-child { margin-top: 1rem; }
 .card .status-pill, .card .running-pill {
@@ -404,6 +406,7 @@ button:disabled { opacity: 0.5; cursor: default; }
   <div class="banner warn" id="noampr" role="status" data-i18n="noAmpr" data-args="file=libSceAmpr.sprx;dir=/data/krakenmount/ampr/" data-wrap="file=b">ampr-emu-ng is missing: put <b>libSceAmpr.sprx</b> into /data/krakenmount/ampr/. FPKG games cannot run without it.</div>
   <div class="banner warn" id="paused" role="status"></div>
   <div class="banner warn" id="waiting" role="status"></div>
+  <div class="banner" id="eject" role="status"></div>
 </div>
 
 <main>
@@ -437,7 +440,8 @@ button:disabled { opacity: 0.5; cursor: default; }
     <label class="row col"><span class="lbl" data-i18n="scanPaths">Scan paths</span>
       <span class="hint" data-i18n="scanPathsHint">One per line. Empty = default roots (/data/homebrew, /data/etaHEN/games, each drive's homebrew, etaHEN/games and root).</span>
       <textarea id="f_scanpath" spellcheck="false"></textarea></label>
-    <label class="row"><span class="lbl" data-i18n="injectAmpr">Inject ampr-emu-ng into every game's fakelib</span><input type="checkbox" id="f_inject_ampr"></label>
+    <label class="row"><span class="lbl" data-i18n="addEmulators">Add the bundled DLC (dlc_emu) and PlayGo (pgo_stub) emulators when a game needs them and has none</span><input type="checkbox" id="f_add_emulators"></label>
+    <label class="row"><span class="lbl" data-i18n="injectAmpr">Inject ampr-emu-ng into folder games' fakelib (pkg games always get it)</span><input type="checkbox" id="f_inject_ampr"></label>
     <label class="row"><span class="lbl" data-i18n="amprAutoUpdate">Auto-update ampr-emu-ng (checked once at start)</span><input type="checkbox" id="f_ampr_auto_update"></label>
     <label class="row"><span class="lbl" data-i18n="amprUpdateRepo">Update source (GitHub owner/repo)</span><input type="text" id="f_ampr_update_repo" spellcheck="false"></label>
     <label class="row"><span class="lbl" data-i18n="amprDebugTitles">Debug ampr-emu-ng for these games (title ids, reports at /api/debug/&lt;TID&gt;/metrics.txt)</span><input type="text" id="f_ampr_debug_titles" spellcheck="false" placeholder="PPSA01234 PPSA05678"></label>
@@ -446,6 +450,9 @@ button:disabled { opacity: 0.5; cursor: default; }
     <label class="row"><span class="lbl" data-i18n="extractMedia">pkg: copy videos out of the pkg (more SSD space, smoother cutscenes)</span><input type="checkbox" id="f_extract_media"></label>
     <label class="row"><span class="lbl" data-i18n="pkgProfile">pkg: keep a decode worker for audio and video streams</span><input type="checkbox" id="f_pkg_profile"></label>
     <label class="row"><span class="lbl" data-i18n="scanInterval">Scan interval, seconds (1-3600)</span><input type="number" id="f_scan_interval_seconds" min="1" max="3600"></label>
+    <label class="row"><span class="lbl" data-i18n="stabilityWait">Wait for a copy to finish, seconds (0-3600, 0 = off)</span><input type="number" id="f_stability_wait_seconds" min="0" max="3600"></label>
+    <label class="row"><span class="lbl" data-i18n="autoRemoveMissing">Remove a game from the home screen when its source is missing</span><input type="checkbox" id="f_auto_remove_missing"></label>
+    <label class="row"><span class="lbl" data-i18n="autoRemoveDelay">Remove after missing for, seconds (1-86400)</span><input type="number" id="f_auto_remove_delay_seconds" min="1" max="86400"></label>
     <label class="row"><span class="lbl" data-i18n="lowSpaceGb">Low space warning, GB</span><input type="number" id="f_low_space_gb" min="0"></label>
     <label class="row"><span class="lbl" data-i18n="notify">System notifications</span><input type="checkbox" id="f_notify"></label>
     <label class="row"><span class="lbl" data-i18n="writeLog">Write kraken.log (up to 1 MB)</span><input type="checkbox" id="f_log"></label>
@@ -455,6 +462,7 @@ button:disabled { opacity: 0.5; cursor: default; }
       <div>
         <p id="scache"></p>
         <p id="sdrives"></p>
+        <p id="stelemetry"></p>
         <div class="msg" id="smsg"></div>
       </div>
       <div class="btns">
@@ -518,6 +526,9 @@ var MSG = {
   en: {
     // Header, tabs, banners
     screens: 'Screens', library: 'Library', settings: 'Settings',
+    // Live diagnostics (telemetry). Other languages fall back to English here.
+    diag: 'System: CPU {cpu} · payload {pcpu} · RAM {ram} · payload uptime {up}',
+    diagUnknown: 'n/a',
     stopApp: 'Stop Kraken Mount', stop: 'Stop', github: 'Kraken Mount on GitHub',
     offline: 'Offline: payload not running. Retrying.',
     starting: 'Starting Kraken Mount...',
@@ -534,6 +545,8 @@ var MSG = {
     kindAll: 'All', kindFolders: 'Folders', badgeFolder: 'Folder',
     driveInternal: 'Internal', driveUsb: 'USB {n}', driveExt: 'Extended {n}',
     driveFree: 'free {free} of {total}',
+    eject: 'Unmount', ejecting: 'Unmounting...', ejectAria: 'Unmount {drive}', ejectTitle: 'Unmount {drive}?',
+    ejectText: 'Keep the drive connected until this finishes. Games on it leave the library.', ejected: '{drive} unmounted. You can disconnect it now.', ejectFailed: 'Could not unmount {drive}: {reason}',
     stPending: 'Pending', stChecking: 'Checking', stBuilding: 'Building', stReady: 'Ready',
     stError: 'Error', stDuplicate: 'Duplicate', running: 'Running',
     statusRunning: '{status} · running',
@@ -572,7 +585,8 @@ var MSG = {
     rescan: 'Rescan', rebuildAll: 'Rebuild all',
     scanPaths: 'Scan paths',
     scanPathsHint: "One per line. Empty = default roots (/data/homebrew, /data/etaHEN/games, each drive's homebrew, etaHEN/games and root).",
-    injectAmpr: "Inject ampr-emu-ng into every game's fakelib",
+    addEmulators: 'Add the bundled DLC (dlc_emu) and PlayGo (pgo_stub) emulators when a game needs them and has none',
+    injectAmpr: "Inject ampr-emu-ng into folder games' fakelib (pkg games always get it)",
     amprAutoUpdate: 'Auto-update ampr-emu-ng (checked once at start)',
     amprUpdateRepo: "Update source (GitHub owner/repo)",
     amprDebugTitles: "Debug ampr-emu-ng for these games (title ids, reports at /api/debug/<TID>/metrics.txt)",
@@ -589,6 +603,9 @@ var MSG = {
     extractMedia: "pkg: copy videos out of the pkg (more SSD space, smoother cutscenes)",
     pkgProfile: "pkg: keep a decode worker for audio and video streams",
     scanInterval: 'Scan interval, seconds (1-3600)',
+    stabilityWait: 'Wait for a copy to finish, seconds (0-3600, 0 = off)',
+    autoRemoveMissing: 'Remove a game from the home screen when its source is missing',
+    autoRemoveDelay: 'Remove after missing for, seconds (1-86400)',
     lowSpaceGb: 'Low space warning, GB',
     notify: 'System notifications',
     writeLog: 'Write kraken.log (up to 1 MB)',
@@ -618,6 +635,8 @@ var MSG = {
     kindAll: 'Все', kindFolders: 'Папки', badgeFolder: 'Папка',
     driveInternal: 'Внутренний', driveUsb: 'USB {n}', driveExt: 'Расширенный {n}',
     driveFree: 'свободно {free} из {total}',
+    eject: 'Размонтировать', ejecting: 'Размонтирование...', ejectAria: 'Размонтировать {drive}', ejectTitle: 'Размонтировать {drive}?',
+    ejectText: 'Не отключайте накопитель, пока операция не завершится. Игры с него пропадут из библиотеки.', ejected: '{drive} размонтирован. Теперь его можно отключить.', ejectFailed: 'Не удалось размонтировать {drive}: {reason}',
     stPending: 'Ожидает', stChecking: 'Проверка', stBuilding: 'Сборка', stReady: 'Готово',
     stError: 'Ошибка', stDuplicate: 'Дубликат', running: 'Запущена',
     statusRunning: '{status} · запущена',
@@ -653,7 +672,8 @@ var MSG = {
     rescan: 'Пересканировать', rebuildAll: 'Пересобрать все',
     scanPaths: 'Пути сканирования',
     scanPathsHint: 'По одному на строку. Пусто = корни по умолчанию (/data/homebrew, /data/etaHEN/games, на каждом накопителе homebrew, etaHEN/games и корень).',
-    injectAmpr: 'Внедрять ampr-emu-ng в fakelib каждой игры',
+    addEmulators: 'Добавлять встроенные эмуляторы DLC (dlc_emu) и PlayGo (pgo_stub), если они нужны игре и у неё их нет',
+    injectAmpr: 'Внедрять ampr-emu-ng в fakelib игр-папок (pkg-игры получают его всегда)',
     amprAutoUpdate: 'Автообновление ampr-emu-ng (проверка один раз при запуске)',
     amprUpdateRepo: "Источник обновлений (GitHub owner/repo)",
     amprDebugTitles: "Отладочный ampr-emu-ng для этих игр (ID игр, отчёты в /api/debug/<TID>/metrics.txt)",
@@ -670,6 +690,9 @@ var MSG = {
     extractMedia: "pkg: извлекать видео из pkg (больше места на SSD, плавнее ролики)",
     pkgProfile: "pkg: держать поток декодирования для аудио и видео",
     scanInterval: 'Интервал сканирования, секунды (1-3600)',
+    stabilityWait: 'Ждать окончания копирования, секунды (0-3600, 0 = выкл.)',
+    autoRemoveMissing: 'Убирать игру с главного экрана, если её источник пропал',
+    autoRemoveDelay: 'Убирать после отсутствия в течение, секунды (1-86400)',
     lowSpaceGb: 'Предупреждать о нехватке места, GB',
     notify: 'Системные уведомления',
     writeLog: 'Писать kraken.log (до 1 MB)',
@@ -699,6 +722,8 @@ var MSG = {
     kindAll: '全部', kindFolders: '文件夹', badgeFolder: '文件夹',
     driveInternal: '内部', driveUsb: 'USB {n}', driveExt: '扩展 {n}',
     driveFree: '可用 {free}，共 {total}',
+    eject: '弹出', ejecting: '正在弹出...', ejectAria: '弹出 {drive}', ejectTitle: '弹出 {drive}？',
+    ejectText: '完成前请保持驱动器连接。其中的游戏将从游戏库中移除。', ejected: '{drive} 已弹出，现在可以断开连接。', ejectFailed: '无法弹出 {drive}：{reason}',
     stPending: '等待中', stChecking: '检查中', stBuilding: '构建中', stReady: '就绪',
     stError: '错误', stDuplicate: '重复', running: '运行中',
     statusRunning: '{status} · 运行中',
@@ -734,7 +759,8 @@ var MSG = {
     rescan: '重新扫描', rebuildAll: '全部重建',
     scanPaths: '扫描路径',
     scanPathsHint: '每行一个。留空 = 默认根目录（/data/homebrew、/data/etaHEN/games，以及每个驱动器的 homebrew、etaHEN/games 和根目录）。',
-    injectAmpr: '将 ampr-emu-ng 注入每个游戏的 fakelib',
+    addEmulators: '当游戏需要且自身没有时，添加内置的 DLC (dlc_emu) 和 PlayGo (pgo_stub) 模拟器',
+    injectAmpr: '将 ampr-emu-ng 注入文件夹游戏的 fakelib（pkg 游戏始终注入）',
     amprAutoUpdate: '自动更新 ampr-emu-ng（启动时检查一次）',
     amprUpdateRepo: "更新来源（GitHub owner/repo）",
     amprDebugTitles: "以下游戏使用调试版 ampr-emu-ng（游戏 ID，报告见 /api/debug/<TID>/metrics.txt）",
@@ -751,6 +777,9 @@ var MSG = {
     extractMedia: "pkg：将视频从 pkg 中提取出来（占用更多 SSD 空间，过场动画更流畅）",
     pkgProfile: "pkg：为音频和视频流保留一个解码线程",
     scanInterval: '扫描间隔，秒 (1-3600)',
+    stabilityWait: '等待复制完成，秒 (0-3600，0 = 关闭)',
+    autoRemoveMissing: '来源缺失时从主屏幕移除游戏',
+    autoRemoveDelay: '缺失多久后移除，秒 (1-86400)',
     lowSpaceGb: '空间不足警告，GB',
     notify: '系统通知',
     writeLog: '写入 kraken.log（最多 1 MB）',
@@ -780,6 +809,8 @@ var MSG = {
     kindAll: 'Alle', kindFolders: 'Ordner', badgeFolder: 'Ordner',
     driveInternal: 'Intern', driveUsb: 'USB {n}', driveExt: 'Erweitert {n}',
     driveFree: '{free} von {total} frei',
+    eject: 'Aushängen', ejecting: 'Wird ausgehängt...', ejectAria: '{drive} aushängen', ejectTitle: '{drive} aushängen?',
+    ejectText: 'Lassen Sie das Laufwerk angeschlossen, bis der Vorgang abgeschlossen ist. Die Spiele darauf verschwinden aus der Bibliothek.', ejected: '{drive} ausgehängt. Sie können es jetzt trennen.', ejectFailed: '{drive} konnte nicht ausgehängt werden: {reason}',
     stPending: 'Ausstehend', stChecking: 'Wird geprüft', stBuilding: 'Wird erstellt', stReady: 'Bereit',
     stError: 'Fehler', stDuplicate: 'Duplikat', running: 'Läuft',
     statusRunning: '{status} · läuft',
@@ -815,7 +846,8 @@ var MSG = {
     rescan: 'Neu scannen', rebuildAll: 'Alle neu erstellen',
     scanPaths: 'Scan-Pfade',
     scanPathsHint: 'Einer pro Zeile. Leer = Standardorte (/data/homebrew, /data/etaHEN/games, auf jedem Laufwerk homebrew, etaHEN/games und das Stammverzeichnis).',
-    injectAmpr: 'ampr-emu-ng in die fakelib jedes Spiels einfügen',
+    addEmulators: 'Mitgelieferte DLC- (dlc_emu) und PlayGo-Emulatoren (pgo_stub) hinzufügen, wenn ein Spiel sie braucht und keine hat',
+    injectAmpr: 'ampr-emu-ng in die fakelib von Ordner-Spielen einfügen (pkg-Spiele erhalten es immer)',
     amprAutoUpdate: 'ampr-emu-ng automatisch aktualisieren (einmal beim Start geprüft)',
     amprUpdateRepo: "Update-Quelle (GitHub owner/repo)",
     amprDebugTitles: "Debug-ampr-emu-ng für diese Spiele (Titel-IDs, Berichte unter /api/debug/<TID>/metrics.txt)",
@@ -832,6 +864,9 @@ var MSG = {
     extractMedia: "pkg: Videos aus dem pkg kopieren (mehr SSD-Platz, flüssigere Zwischensequenzen)",
     pkgProfile: "pkg: einen Dekodier-Worker für Audio- und Videostreams freihalten",
     scanInterval: 'Scan-Intervall, Sekunden (1-3600)',
+    stabilityWait: 'Auf Ende des Kopierens warten, Sekunden (0-3600, 0 = aus)',
+    autoRemoveMissing: 'Spiel vom Startbildschirm entfernen, wenn seine Quelle fehlt',
+    autoRemoveDelay: 'Entfernen nach Fehlen von, Sekunden (1-86400)',
     lowSpaceGb: 'Warnung bei wenig Platz, GB',
     notify: 'Systembenachrichtigungen',
     writeLog: 'kraken.log schreiben (bis 1 MB)',
@@ -861,6 +896,8 @@ var MSG = {
     kindAll: 'Todos', kindFolders: 'Carpetas', badgeFolder: 'Carpeta',
     driveInternal: 'Interno', driveUsb: 'USB {n}', driveExt: 'Ampliado {n}',
     driveFree: 'libre: {free} de {total}',
+    eject: 'Desmontar', ejecting: 'Desmontando...', ejectAria: 'Desmontar {drive}', ejectTitle: '¿Desmontar {drive}?',
+    ejectText: 'Mantén la unidad conectada hasta que termine. Sus juegos saldrán de la biblioteca.', ejected: '{drive} se desmontó. Ya puedes desconectar la unidad.', ejectFailed: 'No se pudo desmontar {drive}: {reason}',
     stPending: 'Pendiente', stChecking: 'Comprobando', stBuilding: 'Creando', stReady: 'Listo',
     stError: 'Error', stDuplicate: 'Duplicado', running: 'En curso',
     statusRunning: '{status} · en curso',
@@ -896,7 +933,8 @@ var MSG = {
     rescan: 'Volver a escanear', rebuildAll: 'Recrear todo',
     scanPaths: 'Rutas de escaneo',
     scanPathsHint: 'Una por línea. Vacío = raíces predeterminadas (/data/homebrew, /data/etaHEN/games y, en cada unidad, homebrew, etaHEN/games y la raíz).',
-    injectAmpr: 'Inyectar ampr-emu-ng en la fakelib de cada juego',
+    addEmulators: 'Añadir los emuladores incluidos de DLC (dlc_emu) y PlayGo (pgo_stub) cuando un juego los necesita y no los trae',
+    injectAmpr: 'Inyectar ampr-emu-ng en la fakelib de los juegos en carpeta (los juegos pkg siempre lo reciben)',
     amprAutoUpdate: 'Actualizar ampr-emu-ng automáticamente (se comprueba una vez al iniciar)',
     amprUpdateRepo: "Origen de actualizaciones (GitHub owner/repo)",
     amprDebugTitles: "ampr-emu-ng de depuración para estos juegos (ID de título, reportes en /api/debug/<TID>/metrics.txt)",
@@ -913,6 +951,9 @@ var MSG = {
     extractMedia: "pkg: copiar los videos fuera del pkg (más espacio en el SSD, cinemáticas más fluidas)",
     pkgProfile: "pkg: reservar un hilo de decodificación para audio y video",
     scanInterval: 'Intervalo de escaneo, segundos (1-3600)',
+    stabilityWait: 'Esperar a que termine la copia, segundos (0-3600, 0 = desactivado)',
+    autoRemoveMissing: 'Quitar un juego de la pantalla de inicio si falta su origen',
+    autoRemoveDelay: 'Quitar tras faltar durante, segundos (1-86400)',
     lowSpaceGb: 'Aviso de poco espacio, GB',
     notify: 'Notificaciones del sistema',
     writeLog: 'Escribir kraken.log (hasta 1 MB)',
@@ -942,6 +983,8 @@ var MSG = {
     kindAll: 'Tous', kindFolders: 'Dossiers', badgeFolder: 'Dossier',
     driveInternal: 'Interne', driveUsb: 'USB {n}', driveExt: 'Étendu {n}',
     driveFree: '{free} libres sur {total}',
+    eject: 'Démonter', ejecting: 'Démontage...', ejectAria: 'Démonter {drive}', ejectTitle: 'Démonter {drive} ?',
+    ejectText: 'Laissez le disque branché jusqu\'à la fin. Ses jeux quittent la bibliothèque.', ejected: '{drive} est démonté. Vous pouvez le débrancher.', ejectFailed: 'Impossible de démonter {drive} : {reason}',
     stPending: 'En attente', stChecking: 'Vérification', stBuilding: 'Création', stReady: 'Prêt',
     stError: 'Erreur', stDuplicate: 'Doublon', running: 'En cours',
     statusRunning: '{status} · en cours',
@@ -977,7 +1020,8 @@ var MSG = {
     rescan: 'Réanalyser', rebuildAll: 'Tout recréer',
     scanPaths: "Chemins d'analyse",
     scanPathsHint: 'Un par ligne. Vide = racines par défaut (/data/homebrew, /data/etaHEN/games et, sur chaque disque, homebrew, etaHEN/games et la racine).',
-    injectAmpr: 'Injecter ampr-emu-ng dans la fakelib de chaque jeu',
+    addEmulators: "Ajouter les émulateurs DLC (dlc_emu) et PlayGo (pgo_stub) fournis quand un jeu en a besoin et n'en a pas",
+    injectAmpr: 'Injecter ampr-emu-ng dans la fakelib des jeux en dossier (les jeux pkg l\'ont toujours)',
     amprAutoUpdate: 'Mettre à jour ampr-emu-ng automatiquement (vérifié une fois au démarrage)',
     amprUpdateRepo: "Source des mises à jour (GitHub owner/repo)",
     amprDebugTitles: "ampr-emu-ng de débogage pour ces jeux (ID de titre, rapports dans /api/debug/<TID>/metrics.txt)",
@@ -994,6 +1038,9 @@ var MSG = {
     extractMedia: "pkg : extraire les vidéos du pkg (plus d'espace SSD, cinématiques plus fluides)",
     pkgProfile: "pkg : réserver un worker de décodage aux flux audio et vidéo",
     scanInterval: "Intervalle d'analyse, secondes (1-3600)",
+    stabilityWait: "Attendre la fin d'une copie, secondes (0-3600, 0 = désactivé)",
+    autoRemoveMissing: "Retirer un jeu de l'écran d'accueil quand sa source manque",
+    autoRemoveDelay: 'Retirer après une absence de, secondes (1-86400)',
     lowSpaceGb: 'Alerte de place faible, GB',
     notify: 'Notifications système',
     writeLog: "Écrire kraken.log (jusqu'à 1 MB)",
@@ -1023,6 +1070,8 @@ var MSG = {
     kindAll: 'すべて', kindFolders: 'フォルダー', badgeFolder: 'フォルダー',
     driveInternal: '内蔵', driveUsb: 'USB {n}', driveExt: '拡張 {n}',
     driveFree: '空き {free} / {total}',
+    eject: 'マウント解除', ejecting: '解除中...', ejectAria: '{drive} のマウントを解除', ejectTitle: '{drive} のマウントを解除しますか？',
+    ejectText: '完了するまでドライブを接続したままにしてください。このドライブのゲームはライブラリから外れます。', ejected: '{drive} のマウントを解除しました。取り外せます。', ejectFailed: '{drive} のマウントを解除できませんでした: {reason}',
     stPending: '待機中', stChecking: '確認中', stBuilding: '作成中', stReady: '準備完了',
     stError: 'エラー', stDuplicate: '重複', running: '実行中',
     statusRunning: '{status} · 実行中',
@@ -1058,7 +1107,8 @@ var MSG = {
     rescan: '再スキャン', rebuildAll: 'すべて再作成',
     scanPaths: 'スキャンするパス',
     scanPathsHint: '1 行に 1 つ。空欄 = 既定のルート（/data/homebrew、/data/etaHEN/games、各ドライブの homebrew、etaHEN/games とルート）。',
-    injectAmpr: 'すべてのゲームの fakelib に ampr-emu-ng を組み込む',
+    addEmulators: 'ゲームが必要とし、自前で持っていない場合に同梱の DLC (dlc_emu) と PlayGo (pgo_stub) エミュレーターを追加',
+    injectAmpr: 'フォルダ形式のゲームの fakelib に ampr-emu-ng を組み込む（pkg ゲームには常に組み込み）',
     amprAutoUpdate: 'ampr-emu-ng を自動更新（起動時に一度確認）',
     amprUpdateRepo: "更新元（GitHub owner/repo）",
     amprDebugTitles: "これらのゲームでデバッグ版 ampr-emu-ng を使用（タイトル ID、レポートは /api/debug/<TID>/metrics.txt）",
@@ -1075,6 +1125,9 @@ var MSG = {
     extractMedia: "pkg: 動画を pkg から取り出す（SSD 容量を多く使用、ムービーが滑らかに）",
     pkgProfile: "pkg: 音声・動画ストリーム用にデコードワーカーを確保",
     scanInterval: 'スキャン間隔、秒 (1-3600)',
+    stabilityWait: 'コピー完了を待つ、秒 (0-3600、0 = オフ)',
+    autoRemoveMissing: 'ソースが見つからないゲームをホーム画面から削除',
+    autoRemoveDelay: '削除までの不在時間、秒 (1-86400)',
     lowSpaceGb: '空き容量不足の警告、GB',
     notify: 'システム通知',
     writeLog: 'kraken.log に書き込む（最大 1 MB）',
@@ -1104,6 +1157,8 @@ var MSG = {
     kindAll: 'Todos', kindFolders: 'Pastas', badgeFolder: 'Pasta',
     driveInternal: 'Interno', driveUsb: 'USB {n}', driveExt: 'Estendido {n}',
     driveFree: 'livre: {free} de {total}',
+    eject: 'Desmontar', ejecting: 'Desmontando...', ejectAria: 'Desmontar {drive}', ejectTitle: 'Desmontar {drive}?',
+    ejectText: 'Mantenha a unidade conectada até terminar. Os jogos dela saem da biblioteca.', ejected: 'Desmontagem de {drive} concluída. Você já pode desconectar a unidade.', ejectFailed: 'Não foi possível desmontar {drive}: {reason}',
     stPending: 'Pendente', stChecking: 'Verificando', stBuilding: 'Criando', stReady: 'Pronto',
     stError: 'Erro', stDuplicate: 'Duplicado', running: 'Em execução',
     statusRunning: '{status} · em execução',
@@ -1139,7 +1194,8 @@ var MSG = {
     rescan: 'Escanear de novo', rebuildAll: 'Recriar tudo',
     scanPaths: 'Caminhos de varredura',
     scanPathsHint: 'Um por linha. Vazio = raízes padrão (/data/homebrew, /data/etaHEN/games e, em cada drive, homebrew, etaHEN/games e a raiz).',
-    injectAmpr: 'Injetar ampr-emu-ng na fakelib de cada jogo',
+    addEmulators: 'Adicionar os emuladores incluídos de DLC (dlc_emu) e PlayGo (pgo_stub) quando um jogo precisa e não os tem',
+    injectAmpr: 'Injetar ampr-emu-ng na fakelib dos jogos em pasta (jogos pkg sempre o recebem)',
     amprAutoUpdate: 'Atualizar o ampr-emu-ng automaticamente (verificado uma vez ao iniciar)',
     amprUpdateRepo: "Origem das atualizações (GitHub owner/repo)",
     amprDebugTitles: "ampr-emu-ng de depuração para estes jogos (IDs de título, relatórios em /api/debug/<TID>/metrics.txt)",
@@ -1156,6 +1212,9 @@ var MSG = {
     extractMedia: "pkg: copiar os vídeos para fora do pkg (mais espaço no SSD, cenas mais fluidas)",
     pkgProfile: "pkg: reservar um worker de decodificação para áudio e vídeo",
     scanInterval: 'Intervalo de varredura, segundos (1-3600)',
+    stabilityWait: 'Aguardar o fim da cópia, segundos (0-3600, 0 = desligado)',
+    autoRemoveMissing: 'Remover um jogo da tela inicial quando a origem sumir',
+    autoRemoveDelay: 'Remover após ausência de, segundos (1-86400)',
     lowSpaceGb: 'Aviso de pouco espaço, GB',
     notify: 'Notificações do sistema',
     writeLog: 'Gravar kraken.log (até 1 MB)',
@@ -1185,6 +1244,8 @@ var MSG = {
     kindAll: 'Tutti', kindFolders: 'Cartelle', badgeFolder: 'Cartella',
     driveInternal: 'Interno', driveUsb: 'USB {n}', driveExt: 'Esteso {n}',
     driveFree: 'liberi {free} su {total}',
+    eject: 'Smonta', ejecting: 'Smontaggio...', ejectAria: 'Smonta {drive}', ejectTitle: 'Smontare {drive}?',
+    ejectText: 'Tieni l\'unità collegata finché non finisce. I suoi giochi escono dalla libreria.', ejected: 'Smontaggio di {drive} completato. Ora puoi scollegare l\'unità.', ejectFailed: 'Impossibile smontare {drive}: {reason}',
     stPending: 'In attesa', stChecking: 'Verifica', stBuilding: 'Creazione', stReady: 'Pronto',
     stError: 'Errore', stDuplicate: 'Duplicato', running: 'In esecuzione',
     statusRunning: '{status} · in esecuzione',
@@ -1220,7 +1281,8 @@ var MSG = {
     rescan: 'Ripeti scansione', rebuildAll: 'Ricrea tutto',
     scanPaths: 'Percorsi di scansione',
     scanPathsHint: "Uno per riga. Vuoto = radici predefinite (/data/homebrew, /data/etaHEN/games e, su ogni unità, homebrew, etaHEN/games e la radice).",
-    injectAmpr: 'Inserisci ampr-emu-ng nella fakelib di ogni gioco',
+    addEmulators: 'Aggiungi gli emulatori inclusi di DLC (dlc_emu) e PlayGo (pgo_stub) quando un gioco ne ha bisogno e non li ha',
+    injectAmpr: 'Inserisci ampr-emu-ng nella fakelib dei giochi in cartella (i giochi pkg lo ricevono sempre)',
     amprAutoUpdate: "Aggiorna automaticamente ampr-emu-ng (controllato una volta all'avvio)",
     amprUpdateRepo: "Origine degli aggiornamenti (GitHub owner/repo)",
     amprDebugTitles: "ampr-emu-ng di debug per questi giochi (ID titolo, report in /api/debug/<TID>/metrics.txt)",
@@ -1237,6 +1299,9 @@ var MSG = {
     extractMedia: "pkg: copia i video fuori dal pkg (più spazio sull'SSD, filmati più fluidi)",
     pkgProfile: "pkg: riserva un worker di decodifica per audio e video",
     scanInterval: 'Intervallo di scansione, secondi (1-3600)',
+    stabilityWait: 'Attendi la fine della copia, secondi (0-3600, 0 = disattivato)',
+    autoRemoveMissing: 'Rimuovi un gioco dalla schermata home se la sorgente manca',
+    autoRemoveDelay: "Rimuovi dopo un'assenza di, secondi (1-86400)",
     lowSpaceGb: 'Avviso spazio insufficiente, GB',
     notify: 'Notifiche di sistema',
     writeLog: 'Scrivi kraken.log (fino a 1 MB)',
@@ -1266,6 +1331,8 @@ var MSG = {
     kindAll: '전체', kindFolders: '폴더', badgeFolder: '폴더',
     driveInternal: '내장', driveUsb: 'USB {n}', driveExt: '확장 {n}',
     driveFree: '{total} 중 {free} 사용 가능',
+    eject: '마운트 해제', ejecting: '해제 중...', ejectAria: '{drive} 마운트 해제', ejectTitle: '{drive} 마운트를 해제할까요?',
+    ejectText: '완료될 때까지 드라이브를 연결해 두세요. 이 드라이브의 게임은 라이브러리에서 사라집니다.', ejected: '{drive} 마운트를 해제했습니다. 이제 분리해도 됩니다.', ejectFailed: '{drive} 마운트를 해제하지 못했습니다: {reason}',
     stPending: '대기 중', stChecking: '확인 중', stBuilding: '생성 중', stReady: '준비됨',
     stError: '오류', stDuplicate: '중복', running: '실행 중',
     statusRunning: '{status} · 실행 중',
@@ -1301,7 +1368,8 @@ var MSG = {
     rescan: '다시 스캔', rebuildAll: '모두 다시 생성',
     scanPaths: '스캔 경로',
     scanPathsHint: '한 줄에 하나씩. 비워 두면 기본 루트(/data/homebrew, /data/etaHEN/games, 각 드라이브의 homebrew, etaHEN/games 및 루트).',
-    injectAmpr: '모든 게임의 fakelib에 ampr-emu-ng 삽입',
+    addEmulators: '게임에 필요하지만 없을 때 내장 DLC (dlc_emu) 및 PlayGo (pgo_stub) 에뮬레이터 추가',
+    injectAmpr: '폴더 게임의 fakelib에 ampr-emu-ng 삽입 (pkg 게임은 항상 삽입)',
     amprAutoUpdate: 'ampr-emu-ng 자동 업데이트 (시작 시 한 번 확인)',
     amprUpdateRepo: "업데이트 소스 (GitHub owner/repo)",
     amprDebugTitles: "이 게임에 디버그 ampr-emu-ng 사용 (타이틀 ID, 보고서는 /api/debug/<TID>/metrics.txt)",
@@ -1318,6 +1386,9 @@ var MSG = {
     extractMedia: "pkg: 동영상을 pkg 밖으로 복사 (SSD 공간 더 사용, 컷신이 더 부드러움)",
     pkgProfile: "pkg: 오디오·비디오 스트림용 디코드 워커 유지",
     scanInterval: '스캔 간격, 초 (1-3600)',
+    stabilityWait: '복사가 끝날 때까지 대기, 초 (0-3600, 0 = 끔)',
+    autoRemoveMissing: '소스가 없으면 홈 화면에서 게임 제거',
+    autoRemoveDelay: '없어진 뒤 제거까지, 초 (1-86400)',
     lowSpaceGb: '공간 부족 경고, GB',
     notify: '시스템 알림',
     writeLog: 'kraken.log 기록 (최대 1 MB)',
@@ -1347,6 +1418,8 @@ var MSG = {
     kindAll: 'الكل', kindFolders: 'المجلدات', badgeFolder: 'مجلد',
     driveInternal: 'داخلي', driveUsb: 'USB {n}', driveExt: 'موسّع {n}',
     driveFree: 'متاح {free} من {total}',
+    eject: 'إلغاء التركيب', ejecting: 'جارٍ إلغاء التركيب...', ejectAria: 'إلغاء تركيب {drive}', ejectTitle: 'إلغاء تركيب {drive}؟',
+    ejectText: 'أبقِ محرك الأقراص متصلًا حتى تنتهي العملية. ستخرج ألعابه من المكتبة.', ejected: 'تم إلغاء تركيب {drive}. يمكنك فصله الآن.', ejectFailed: 'تعذّر إلغاء تركيب {drive}: {reason}',
     stPending: 'قيد الانتظار', stChecking: 'جارٍ الفحص', stBuilding: 'جارٍ الإنشاء', stReady: 'جاهز',
     stError: 'خطأ', stDuplicate: 'مكرر', running: 'قيد التشغيل',
     statusRunning: '{status} · قيد التشغيل',
@@ -1382,7 +1455,8 @@ var MSG = {
     rescan: 'إعادة المسح', rebuildAll: 'إعادة إنشاء الكل',
     scanPaths: 'مسارات المسح',
     scanPathsHint: 'مسار واحد في كل سطر. فارغ = الجذور الافتراضية (/data/homebrew و/data/etaHEN/games، وعلى كل محرك homebrew وetaHEN/games والجذر).',
-    injectAmpr: 'حقن ampr-emu-ng في fakelib لكل لعبة',
+    addEmulators: 'إضافة محاكيات DLC (dlc_emu) وPlayGo (pgo_stub) المضمّنة عندما تحتاجها اللعبة ولا تتضمنها',
+    injectAmpr: 'حقن ampr-emu-ng في fakelib لألعاب المجلدات (ألعاب pkg تحصل عليه دائمًا)',
     amprAutoUpdate: 'تحديث ampr-emu-ng تلقائيًا (يُفحص مرة واحدة عند البدء)',
     amprUpdateRepo: "مصدر التحديثات (GitHub owner/repo)",
     amprDebugTitles: "ampr-emu-ng للتصحيح لهذه الألعاب (معرّفات العناوين، التقارير في /api/debug/<TID>/metrics.txt)",
@@ -1399,6 +1473,9 @@ var MSG = {
     extractMedia: "pkg: نسخ مقاطع الفيديو خارج pkg (مساحة أكبر على SSD، مشاهد أكثر سلاسة)",
     pkgProfile: "pkg: تخصيص عامل فك ترميز لتدفقات الصوت والفيديو",
     scanInterval: 'فاصل المسح، بالثواني (1-3600)',
+    stabilityWait: 'انتظار انتهاء النسخ، بالثواني (0-3600، 0 = إيقاف)',
+    autoRemoveMissing: 'إزالة اللعبة من الشاشة الرئيسية عند فقدان مصدرها',
+    autoRemoveDelay: 'الإزالة بعد الغياب لمدة، بالثواني (1-86400)',
     lowSpaceGb: 'تحذير المساحة القليلة، GB',
     notify: 'إشعارات النظام',
     writeLog: 'كتابة kraken.log (حتى 1 MB)',
@@ -1693,18 +1770,27 @@ function renderStorage(drives) {
   if (internal) list.push(internal);
   var box = $('storage');
   box.hidden = !list.length;
-  var key = list.map(function (d) { return d.mount; }).join('|');
+  var key = list.map(function (d) { return d.mount + (d.ejectable ? '*' : ''); }).join('|');
   if (box.getAttribute('data-key') !== key) {
+    var hadFocus = box.contains(document.activeElement);
     box.setAttribute('data-key', key);
     box.textContent = '';
-    list.forEach(function () {
+    list.forEach(function (d) {
       var pill = el('div', 'storage-pill glass'), meter = el('span', 'meter');
       meter.appendChild(el('i'));
       pill.appendChild(el('b'));
       pill.appendChild(meter);
       pill.appendChild(el('span'));
+      if (d.ejectable) {
+        var btn = el('button', 'small eject');
+        btn.type = 'button';
+        btn.setAttribute('data-mount', d.mount);
+        btn.onclick = function () { askEject(d.mount); };
+        pill.appendChild(btn);
+      }
       box.appendChild(pill);
     });
+    if (hadFocus) focusChip();
   }
   list.forEach(function (d, i) {
     var pill = box.children[i];
@@ -1712,6 +1798,41 @@ function renderStorage(drives) {
     setText(pill.children[0], driveLabel(d.mount));
     pill.children[1].firstChild.style.width = used.toFixed(1) + '%';
     setText(pill.children[2], t('driveFree', { free: fmtSize(d.free), total: fmtSize(d.total) }));
+    var btn = pill.children[3];
+    if (btn) {
+      btn.disabled = ejecting != null;
+      setText(btn, t(ejecting === d.mount ? 'ejecting' : 'eject'));
+      btn.setAttribute('aria-label', t('ejectAria', { drive: driveLabel(d.mount) }));
+    }
+  });
+}
+// One unmount at a time; the server answers within ~6 s. The reason comes from the server, in English.
+var ejecting = null, ejectTimer = null;
+function ejectBanner(text, ok) {
+  clearTimeout(ejectTimer);
+  $('eject').classList.toggle('ok', !!ok);
+  setBanner('eject', !!text, text || function () { return ''; });
+  if (ok) ejectTimer = setTimeout(function () { setBanner('eject', false); }, 8000);
+}
+function askEject(mount) {
+  var drive = function () { return driveLabel(mount); };
+  ask(t('ejectTitle', { drive: drive() }), t('ejectText'), t('eject'), async function () {
+    ejecting = mount;
+    ejectBanner(null);
+    if (state) renderStorage(state.drives);
+    try {
+      var r = await fetch('/api/eject', { method: 'POST', body: mount });
+      if (!r.ok) throw new Error((await r.text()) || 'HTTP ' + r.status);
+      ejectBanner(function () { return t('ejected', { drive: drive() }); }, true);
+      schedule(300);
+    } catch (e) {
+      var reason = e.message;
+      ejectBanner(function () { return t('ejectFailed', { drive: drive(), reason: reason }); }, false);
+    }
+    ejecting = null;
+    if (state) renderStorage(state.drives);
+    var again = document.querySelector('#storage .eject[data-mount="' + mount + '"]');
+    if (again && (!document.activeElement || document.activeElement === document.body)) again.focus();
   });
 }
 function makeCard(id) {
@@ -1988,6 +2109,7 @@ async function poll() {
     renderGrid(games);
     if (modalOpen()) renderModal();
     if (typeof renderSettingsInfo === 'function') renderSettingsInfo();
+    fetchTelemetry();
     var lines = Array.isArray(state.log) ? state.log : [];
     var logText = lines.slice(-100).join('\n');
     if ($('log').textContent !== logText) {
@@ -2003,8 +2125,8 @@ async function poll() {
 }
 
 // ---- chunk 3: settings, log, views, keys ----
-var BOOLS = ['inject_ampr', 'ampr_auto_update', 'backports', 'extract_media', 'pkg_profile', 'notify', 'log', 'debug'];
-var NUMS = ['scan_interval_seconds', 'low_space_gb'];
+var BOOLS = ['inject_ampr', 'add_emulators', 'ampr_auto_update', 'backports', 'extract_media', 'pkg_profile', 'auto_remove_missing', 'notify', 'log', 'debug'];
+var NUMS = ['scan_interval_seconds', 'stability_wait_seconds', 'auto_remove_delay_seconds', 'low_space_gb'];
 var settingsRequest = 0;
 function fillSettings(v) {
   $('f_scanpath').value = (v.scanpath || []).join('\n');
@@ -2023,6 +2145,30 @@ function readSettings() {
   BOOLS.forEach(function (k) { v[k] = $('f_' + k).checked; });
   NUMS.forEach(function (k) { var n = parseInt($('f_' + k).value, 10); if (!isNaN(n)) v[k] = n; });
   return v;
+}
+// Live diagnostics: a null field means the sysctl is unavailable on this firmware, shown as n/a.
+var telemetry = null;
+async function fetchTelemetry() {
+  try {
+    var r = await fetch('/api/telemetry', { cache: 'no-store' });
+    if (r.ok) { telemetry = await r.json(); renderTelemetry(); }
+  } catch (e) { /* diagnostics are best-effort; never break the main poll */ }
+}
+function pct(v) { return (v == null) ? t('diagUnknown') : (Math.round(v) + '%'); }
+function dur(s) {
+  if (s == null) return t('diagUnknown');
+  s = s | 0; var h = (s / 3600) | 0, m = ((s % 3600) / 60) | 0;
+  return h ? (h + 'h ' + m + 'm') : (m ? (m + 'm') : (s + 's'));
+}
+function renderTelemetry() {
+  var d = telemetry; if (!d) return;
+  var ram = (d.ram_used_bytes == null || d.ram_total_bytes == null)
+    ? t('diagUnknown')
+    : (fmtSize(d.ram_used_bytes) + ' / ' + fmtSize(d.ram_total_bytes));
+  setText($('stelemetry'), t('diag', {
+    cpu: pct(d.cpu_system_percent), pcpu: pct(d.cpu_payload_percent),
+    ram: ram, up: dur(d.payload_uptime_seconds)
+  }));
 }
 function renderSettingsInfo() {
   var c = (state && state.cache) || {};
@@ -2155,12 +2301,21 @@ function moveInSeg(btn, key) {
     var sib = key === 'ArrowLeft' ? btn.previousElementSibling : btn.nextElementSibling;
     if (sib) sib.focus();
     else if (seg.id !== 'chips') moveInTop(btn, key);
+    else if (key === 'ArrowRight' && document.querySelector('#storage .eject')) document.querySelector('#storage .eject').focus();
   } else if (seg.id === 'chips') {
     if (key === 'ArrowDown' && cards().length) cards()[0].focus();
     if (key === 'ArrowUp') document.querySelector('.nav [aria-selected="true"]').focus();
   } else if (key === 'ArrowDown') {
     if ($('library').hidden) fields()[0].focus(); else focusChip();
   }
+}
+// The Unmount buttons on the drive pills, right of the filter chips.
+function moveInStorage(btn, key) {
+  var row = Array.prototype.slice.call(document.querySelectorAll('#storage .eject')), i = row.indexOf(btn);
+  if (key === 'ArrowRight' && row[i + 1]) row[i + 1].focus();
+  else if (key === 'ArrowLeft') { if (row[i - 1]) row[i - 1].focus(); else focusChip(); }
+  else if (key === 'ArrowDown' && cards().length) cards()[0].focus();
+  else if (key === 'ArrowUp') document.querySelector('.nav [aria-selected="true"]').focus();
 }
 // The top row: screen tabs, then Stop and GitHub.
 function moveInTop(t, key) {
@@ -2249,6 +2404,7 @@ document.addEventListener('keydown', function (e) {
   if (typing) return;
   if (t.classList.contains('card')) { e.preventDefault(); moveInGrid(t, k); }
   else if (t.classList.contains('seg-opt')) { e.preventDefault(); moveInSeg(t, k); }
+  else if (t.classList.contains('eject')) { e.preventDefault(); moveInStorage(t, k); }
   else if ((k === 'ArrowLeft' || k === 'ArrowRight') && t.parentNode.classList.contains('top-actions')) {
     e.preventDefault(); moveInTop(t, k);
   }
@@ -2269,7 +2425,7 @@ function renderAll() {
   applyStatic();
   fillLangSelect();
   setText($('logtoggle'), t(logOpen ? 'hideLog' : 'showLog'));
-  ['offline', 'lowspace', 'paused', 'smsg'].forEach(function (id) { if ($(id)._live) live($(id), $(id)._live); });
+  ['offline', 'lowspace', 'paused', 'smsg', 'eject'].forEach(function (id) { if ($(id)._live) live($(id), $(id)._live); });
   if (state) {
     var games = Array.isArray(state.games) ? state.games : [];
     renderChips(games);
