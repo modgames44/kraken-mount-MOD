@@ -42,7 +42,7 @@ only into a cache's `fakelib/`, never into `/data/krakenmount/ampr/`.
 | `/data/krakenmount/ampr-titles/<TID>/` | optional per-title replacement of `ampr/` (`cache::ampr_dir`): its files go into that title's fakelib instead; an empty dir injects nothing. For a debug or test ng build on one game, or to rule ng out |
 | `/data/ampr_emu_status.txt` | written by ng at every module_start (version, mode, app0 rw/ro, hook rc, index ok/fail/skip, `missing <symbol>` lines); read by the launch watcher |
 | `/data/krakenmount/ampr/` | ampr-emu-ng files (`libSceAmpr.sprx`, ...), copied on top of every game's `fakelib/` in its cache (chmod 0777 at start; a `libkernel.sprx` there is never copied and logs a warning) |
-| `/data/krakenmount/kraken.log` | log (setting `log`); starts over past 1 MiB, no kept copy |
+| `/data/krakenmount/kraken.log` | log (setting `log`); each line starts with the UTC time and the milliseconds since boot (`2026-11-19 20:51:03Z [10643021] `); starts over past 1 MiB, no kept copy |
 | `/data/krakenmount/kraken-mount.elf` | self copy the tile starts (Dump Forge style, below) |
 
 ## Drives and scan roots (`src/storage.rs`)
@@ -52,6 +52,12 @@ Default scan roots: SMP `SM_DEFAULT_SCAN_PATHS_INITIALIZER` order, only for driv
 (`/data/homebrew`, `/data/etaHEN/games`, ext `homebrew`/`etaHEN/games`, usb `homebrew`, usb `etaHEN/games`,
 usb roots, ext roots). `scanpath=` lines in config replace them.
 A dir named `backports` in a scan root is never a game.
+Depth (`scan::candidates`, SMP scan_depth=2): a root's entries are scanned, and also the entries of each subfolder that is
+not a game folder, not `backports` (any case: exFAT), not a dot entry and not itself a scan root (one level only, dot
+entries and `backports` skipped). A drive root (`/mnt/<x>`) is never descended: its `homebrew` and `etaHEN/games` are
+roots of their own. Every root's own entries come first, in root order, then all nested ones; a nested source never
+beats a title already held (`claim`), so an old copy in a subfolder cannot take over. A path already listed in this
+pass is not listed again.
 Title name (`scan::parse_param`, as Dump Forge's gameTitle): the `localizedParameters` `titleName` in the
 console language (`i18n::title_tag`: `SCE_SYSTEM_PARAM_LANG_*` -> its param.json tag, all 31 languages,
 en-US when unreadable), else the same language in another region (es-419 -> es-ES), else the default
@@ -70,6 +76,7 @@ A flat TOML subset: `key = value` with strings, `true`/`false`, integers and arr
 | `scanpath` | (defaults above) | array of paths; replaces the default scan roots |
 | `inject_ampr` | true | copy `/data/krakenmount/ampr/*` on top of a folder game's fakelib; pkg games always get it (pkg mode exists only in ampr-emu-ng) (a change only refreshes `fakelib/`) |
 | `add_emulators` | true | add the bundled DLC (dlc_emu) and PlayGo (pgo_stub) emulators to a game's fakelib when it needs them and ships none (a change only refreshes `fakelib/`) |
+| `playgo_off` | [] | array of title ids (`playgo_off = ["PPSA01556"]`) that get no bundled PlayGo stub: pgo_stub is neither added nor upgraded, a `libScePlayGo.sprx` the game or backport ships stays as shipped; the dlc_emu set is unaffected. Per game from the UI (`POST /api/playgo/<TID>`); a change only refreshes `fakelib/` |
 | `ampr_auto_update` | true | once per start, download a newer ampr-emu-ng release from GitHub (a hand-placed `libSceAmpr.sprx` is kept) |
 | `backports` | true | apply `<scan root>/backports/<TID>*` |
 | `scan_interval_seconds` | 10 | scan loop period (1..3600) |
@@ -85,7 +92,9 @@ A flat TOML subset: `key = value` with strings, `true`/`false`, integers and arr
 | `ampr_update_repo` | `quer3q/ampr-emu-ng` | GitHub `owner/repo` whose latest release the auto-update installs; a fork that publishes its own `libSceAmpr.sprx` points it at itself |
 | `ampr_debug_titles` | [] | title ids that get the bundled debug ng (`ampr-debug/`, from `vendor/ampr-emu-ng/libSceAmpr-debug.sprx` through build.rs; empty when not bundled); while such a game runs the watcher saves its `/metrics` (and `metrics-start.txt`, the first one) and `/fsfail` every 5 s to `/data/krakenmount/debug/<TID>/`, plus ng's status and trace files after the exit; served at `GET /api/debug/<TID>[/<file>]` |
 
-Invalid values are logged and replaced by the default. The web UI edits the same file.
+Invalid values are logged and replaced by the default; a string item of an array (`scanpath`, `playgo_off`) that is not
+a valid value is logged and skipped, the other items stay (an array that does not parse, such as one with a number in it,
+is ignored as a whole). The web UI edits the same file.
 
 ## Cache (`src/cache.rs`)
 `/data/krakenmount/caches/<TID>/`, stamp file `.done` written last.
@@ -134,13 +143,15 @@ Invalid values are logged and replaced by the default. The web UI edits the same
   another prx is missed). Each add logs `<TID>: fakelib: added <name> (<project> <version>)`.
   The dlc_emu set is all-or-nothing: when any of its 3 files is a copy that is neither a known older release nor the bundled file, none of the 3
   is added or upgraded (no mixed set), logged `<TID>: fakelib: kept the game's dlc_emu files (not a known release)`; pgo_stub goes per file.
+  A title in `playgo_off` skips pgo_stub entirely (no add, no upgrade, the eboot is not searched), logged
+  `<TID>: fakelib: PlayGo stub off (playgo_off)`; `fakelib/` starts from scratch, so a stub added earlier is gone.
   Then, with `inject_ampr` and always for a pkg game (the package's own `libSceAmpr.sprx` cannot read the
   `.pkg` named in `kraken.image`), every file of `/data/krakenmount/ampr/` (not `libkernel.sprx`) is copied on top,
   so ours wins over the game's own `libSceAmpr.sprx`, except a game's or backport's ampr-emu-ng strictly newer than
   ours (the `ampr-emu-ng X.Y.Z` identity in both files; ours without one counts as older), which is kept and logged
   `<TID>: fakelib: kept the game's ampr-emu-ng <v> (newer than <v>)` (no ng downgrade, also over a hand-placed copy). `.ampr` records what fakelib was composed from: `{"ampr": {name: [size, mtime]} or null,
   "emus": null without `add_emulators`, else the dlc_emu and pgo_stub versions, whether a `dlc_emu.ini` is on
-  disk (folder or backport root) and the eboot's [size, mtime], "playgo": [eboot size, mtime secs, imports PlayGo]}`
+  disk (folder or backport root), the eboot's [size, mtime] and "playgo_off" (the title is in `playgo_off`), "playgo": [eboot size, mtime secs, imports PlayGo]}`
   (a pkg's own `dlc_emu.ini` is not in it, a pkg change rebuilds through the stamp). "playgo" memoizes the PlayGo
   import search: `eboot.bin` is read again only when its (size, mtime) differs (a read error is not memoized), and
   `check` never compares it. An older `.ampr` without `emus` differs, so every cache refreshes `fakelib/` once; that
@@ -256,7 +267,13 @@ data). A failure only logs `<TID>: metadata snapshot skipped: …`; registration
 SMP port: copy `sce_sys` to `/user/app/<TID>/sce_sys` + `icon0.png`, appmeta, trophy data,
 nullfs `app0 -> /system_ex/app/<TID>` (app0 = cache dir for FPKG, game folder for Folder),
 for a Folder with a backport a unionfs of the backport dir on top (SMP
-`mount_backport_overlay`), then `sceAppInstUtilAppInstallTitleDir` (fallback InstallAll).
+`mount_backport_overlay`), then `sceAppInstUtilAppInstallTitleDir`. Where it does not resolve
+(FW 12+) the title is only staged: InstallAll registers every folder under `/user/app`, so the scan
+pass calls it once after its last game for every title staged in it (SMP install queue). Not
+when the pass stopped for a game start: nothing registers while a game runs, and the titles staged
+so far are not registered yet, so the pass after the game exits stages them again and installs them. Logged `<TIDs>: <dlsym error>; sceAppInstUtilAppInstallAll:
+<rc> (<ms> ms)`; a failure marks each of those titles failed. A batch of more than one title
+gets one toast (`<n> games registered` / `<n> games failed`) instead of one per title.
 Every staged copy (sce_sys, `icon0.png`, appmeta, trophy files) is set to 0666 after writing: a
 copy keeps the source's mode, and a 0600 file from a game folder would stay unreadable for the
 trophy and save services. A copied file named `param.json` gets SMP `copy_param_json_rewrite`: the
@@ -308,7 +325,7 @@ No overlay when neither layer applies.
 pub const CONFIG_PATH: &str = "/data/krakenmount/config.toml";
 #[derive(Clone, PartialEq, Debug)]
 pub struct Settings { pub scan_paths: Vec<String>, pub inject_ampr: bool, pub add_emulators: bool,
-  pub ampr_auto_update: bool,
+  pub playgo_off: Vec<String>, pub ampr_auto_update: bool,
   pub backports: bool, pub scan_interval_secs: u64, pub stability_wait_secs: u64, pub low_space_gb: u64,
   pub auto_remove_missing: bool, pub auto_remove_delay_secs: u64, pub notify: bool, pub log: bool, pub debug: bool,
   pub extract_media: bool, pub pkg_profile: bool, pub ampr_update_repo: String,
@@ -398,9 +415,14 @@ pub fn https_get(url: &str, max: usize) -> std::io::Result<Vec<u8>>;
   the rest `no-store`.
 - `GET /api/state`:
   `{version, busy, paused, waiting:"kstuff"|"shadowmount"|null, running:[TID], games:[{title_id, title_name, version, path, kind:"pkg"|"folder", packing:"plain"|"zstd"|"lz4"|null,
-  drive, size, status:"pending"|"checking"|"building"|"ready"|"error"|"duplicate", error, cache_size, cache_built, backport}],
+  drive, size, status:"pending"|"checking"|"building"|"ready"|"error"|"duplicate", error, cache_size, cache_built, backport,
+  playgo: bool|null (the memoized "eboot imports PlayGo", null when unknown or `add_emulators` is off), playgo_off: bool (false while `add_emulators` is off)}],
   drives:[{mount, label, kind, total, free, ejectable}], cache:{path, size, free, low_space, ampr_present}, log:[last 100 lines of the last 64 KiB]}`
-- `GET /api/settings` -> settings JSON; `POST /api/settings` (JSON body) -> save, apply, rescan.
+- `GET /api/settings` -> settings JSON; `POST /api/settings` (JSON body) -> save, apply, rescan; a body
+  without `playgo_off` keeps the current list (the settings form does not send it).
+- `POST /api/playgo/<TID>`, body exactly `on` or `off` -> removes the title from / adds it to `playgo_off`,
+  saves, applies, rescans, logs `<TID>: PlayGo stub on|off`, 204; 404 for an invalid or absent library
+  title, 400 for any other body.
 - `GET /api/ampr` -> `{kind: "bundled"|"downloaded"|"hand"|"missing"|"error", version, updating}` of
   `ampr/libSceAmpr.sprx`; `POST /api/ampr/update` -> forced update, answered when done: 200 + result text,
   409 while one runs, 502 + error text.
@@ -453,3 +475,15 @@ stage 1. The pushed stage 2 saves stage 1 to `/data/krakenmount/kraken-mount.elf
 
 ## Build and check
 `cargo check --target x86_64-unknown-freebsd` (fast, host). Full payload: `ps5/build.sh` (Docker).
+
+## Installer and installed packages (`src/installer.rs`, `src/installer_io.rs`, `src/installed.rs`)
+Ported from TITAN CORE (GPL-3.0-or-later). The installer copies a PKG from a connected drive to
+`/user/app/<TID>/app.pkg` (internal, with its sce_sys so it shows on the home menu) or
+`<drive>/KrakenMount/Games/<TID>/<TID>.pkg` (external), verifying byte-for-byte and committing with
+an atomic rename; `installer::roots()` is scanned so the game then appears. One install at a time,
+run from the scan loop (never while a game runs), with full rollback on any failure. Web API:
+`/api/installer/{destinations,status,browse,start,cancel}`; UI tab "Installer".
+`installed.rs` (setting `run_installed`, off by default) scans `/user/app/*/app.pkg` (and the same
+under connected drives) for PS5 debug packages, prepares each in place (`prepare`: records original
+permissions in `/data/krakenmount/installed-sources/<TID>.json`, then adds read bits; never copies
+or moves), and adds it as a pkg source, skipping any title a scanned source already provides.

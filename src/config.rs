@@ -9,6 +9,8 @@ pub struct Settings {
     pub scan_paths: Vec<String>,
     pub inject_ampr: bool,
     pub add_emulators: bool,
+    /// Title ids that get no bundled PlayGo stub (pgo_stub): not added, not upgraded.
+    pub playgo_off: Vec<String>,
     pub ampr_auto_update: bool,
     pub backports: bool,
     pub scan_interval_secs: u64,
@@ -27,6 +29,9 @@ pub struct Settings {
     pub extract_media: bool,
     /// pkg: write ng's runtime profile (one decode worker kept for small reads).
     pub pkg_profile: bool,
+    /// Run PS5 debug packages already installed under /user/app (and connected drives) through the
+    /// cache/AMPR pipeline, prepared in place (installed.rs). Off by default.
+    pub run_installed: bool,
     /// GitHub `owner/repo` whose latest release the ampr-emu-ng auto-update installs: a fork that
     /// publishes its own libSceAmpr.sprx points it at itself, so an upstream release does not
     /// replace the fork's build.
@@ -42,6 +47,7 @@ impl Default for Settings {
             scan_paths: Vec::new(),
             inject_ampr: true,
             add_emulators: true,
+            playgo_off: Vec::new(),
             ampr_auto_update: true,
             backports: true,
             scan_interval_secs: 10,
@@ -54,6 +60,7 @@ impl Default for Settings {
             debug: false,
             extract_media: false,
             pkg_profile: true,
+            run_installed: false,
             ampr_update_repo: DEFAULT_UPDATE_REPO.to_string(),
             ampr_debug_titles: Vec::new(),
         }
@@ -65,6 +72,7 @@ const HELP: &[(&str, &str)] = &[
     ("scanpath", "replaces the default scan roots (/data/homebrew, /data/etaHEN/games, <drive>/homebrew, ...)"),
     ("inject_ampr", "true = copy /data/krakenmount/ampr/* on top of a folder game's fakelib (pkg games always get it; a change only refreshes fakelib/)"),
     ("add_emulators", "true = add the bundled DLC (dlc_emu) and PlayGo (pgo_stub) emulators to a game's fakelib when it needs them and ships none (a change only refreshes fakelib/)"),
+    ("playgo_off", "title ids that get no bundled PlayGo stub (pgo_stub): not added, not upgraded; a libScePlayGo.sprx the game ships stays (a change only refreshes fakelib/)"),
     ("ampr_auto_update", "true = once per start, download a newer ampr-emu-ng release from GitHub (a hand-placed libSceAmpr.sprx is kept)"),
     ("backports", "true = apply backports/<TID>* from the game's scan root, then the other roots, then /data/homebrew"),
     ("scan_interval_seconds", "scan loop period, 1..3600"),
@@ -77,6 +85,7 @@ const HELP: &[(&str, &str)] = &[
     ("debug", "true = klog capture to /data/krakenmount/klog.txt and the /file/data/... route"),
     ("extract_media", "true = pkg games: copy video files (.bk2 .usm .mp4 ...) out of the pkg into the cache (rebuilds pkg caches; uses more internal SSD space)"),
     ("pkg_profile", "true = pkg games: ng keeps one decode worker for small reads (audio/video streams)"),
+    ("run_installed", "true = also run PS5 debug packages already installed under /user/app (and connected drives) through the cache/AMPR pipeline, prepared in place"),
     ("ampr_update_repo", "GitHub owner/repo whose latest release ampr_auto_update installs (a fork: its own repo)"),
     ("ampr_debug_titles", "array of title ids that run the bundled debug ampr-emu-ng; reports in /data/krakenmount/debug/<TID>/"),
 ];
@@ -122,6 +131,12 @@ fn set(s: &mut Settings, key: &str, v: &str) -> Result<(), String> {
         "scanpath" => return Err(format!("expected an absolute path, got {v:?}")),
         "inject_ampr" => s.inject_ampr = flag(v)?,
         "add_emulators" => s.add_emulators = flag(v)?,
+        "playgo_off" if crate::scan::valid_tid(v) => {
+            if !s.playgo_off.iter().any(|t| t == v) {
+                s.playgo_off.push(v.to_string());
+            }
+        }
+        "playgo_off" => return Err(format!("expected a title id like PPSA01556, got {v:?}")),
         "ampr_auto_update" => s.ampr_auto_update = flag(v)?,
         // Removed setting (the game's fakelib is always used in full): ignored, dropped on the next save.
         "game_fakelib" => {}
@@ -145,6 +160,7 @@ fn set(s: &mut Settings, key: &str, v: &str) -> Result<(), String> {
         "debug" => s.debug = flag(v)?,
         "extract_media" => s.extract_media = flag(v)?,
         "pkg_profile" => s.pkg_profile = flag(v)?,
+        "run_installed" => s.run_installed = flag(v)?,
         "ampr_debug_titles" if valid_tid(v) => {
             let v = v.to_ascii_uppercase();
             if !s.ampr_debug_titles.contains(&v) {
@@ -279,10 +295,21 @@ fn parse(text: &str) -> Settings {
                 s.scan_paths.clear(); // the array replaces the defaults (and an earlier scanpath line)
             } else if k == "ampr_debug_titles" {
                 s.ampr_debug_titles.clear();
+            } else if k == "playgo_off" {
+                s.playgo_off.clear(); // a later playgo_off line replaces an earlier one
             } else if vals.len() != 1 {
                 return Err("expected one value, not an array".into());
+            } else {
+                return set(&mut s, k, &vals[0]);
             }
-            vals.iter().try_for_each(|x| set(&mut s, k, x))
+            // An array item that is wrong is logged and skipped; the others stay, so the next save
+            // does not drop them.
+            for x in &vals {
+                if let (Err(e), false) = (set(&mut s, k, x), quiet) {
+                    log!("config {CONFIG_PATH}:{}: {k}: {e}; skipped", n + 1);
+                }
+            }
+            Ok(())
         });
         if let (Err(e), false) = (r, quiet) {
             log!("config {CONFIG_PATH}:{}: {k}: {e}; using the default", n + 1);
@@ -304,6 +331,10 @@ fn render(s: &Settings) -> String {
             }
             "inject_ampr" => out += &format!("{k} = {}\n", s.inject_ampr),
             "add_emulators" => out += &format!("{k} = {}\n", s.add_emulators),
+            "playgo_off" => {
+                let items: Vec<String> = s.playgo_off.iter().map(|t| toml_quote(t)).collect();
+                out += &format!("playgo_off = [{}]\n", items.join(", "));
+            }
             "ampr_auto_update" => out += &format!("{k} = {}\n", s.ampr_auto_update),
             "backports" => out += &format!("{k} = {}\n", s.backports),
             "scan_interval_seconds" => out += &format!("{k} = {}\n", s.scan_interval_secs),
@@ -315,6 +346,7 @@ fn render(s: &Settings) -> String {
             "log" => out += &format!("{k} = {}\n", s.log),
             "extract_media" => out += &format!("{k} = {}\n", s.extract_media),
             "pkg_profile" => out += &format!("{k} = {}\n", s.pkg_profile),
+            "run_installed" => out += &format!("{k} = {}\n", s.run_installed),
             "ampr_update_repo" => out += &format!("{k} = {}\n", toml_quote(&s.ampr_update_repo)),
             "ampr_debug_titles" => {
                 let items: Vec<String> = s.ampr_debug_titles.iter().map(|t| toml_quote(t)).collect();
@@ -360,6 +392,7 @@ pub fn to_json(s: &Settings) -> Value {
         "scanpath": s.scan_paths,
         "inject_ampr": s.inject_ampr,
         "add_emulators": s.add_emulators,
+        "playgo_off": s.playgo_off,
         "ampr_auto_update": s.ampr_auto_update,
         "backports": s.backports,
         "scan_interval_seconds": s.scan_interval_secs,
@@ -383,8 +416,8 @@ pub fn from_json(v: &Value) -> Result<Settings, String> {
     let mut s = Settings::default();
     for (k, val) in obj {
         let vals: Vec<&Value> = match (k.as_str(), val) {
-            ("scanpath" | "ampr_debug_titles", Value::Array(a)) => a.iter().collect(),
-            ("scanpath" | "ampr_debug_titles", _) => return Err(format!("{k}: expected an array of strings")),
+            ("scanpath" | "ampr_debug_titles" | "playgo_off", Value::Array(a)) => a.iter().collect(),
+            ("scanpath" | "ampr_debug_titles" | "playgo_off", _) => return Err(format!("{k}: expected an array of strings")),
             _ => vec![val],
         };
         for x in vals {
