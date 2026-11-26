@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/logo.png" width="128" alt="Kraken Mount"></p>
+
 # Kraken Mount
 
 > **Fork de [quer3q/kraken-mount](https://github.com/quer3q/kraken-mount), mantenido por modgames44.**
