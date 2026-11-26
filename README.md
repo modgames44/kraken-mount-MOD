@@ -1,84 +1,43 @@
 <p align="center"><img src="docs/logo.png" width="128" alt="Kraken Mount"></p>
 
-A PS5 game mounter. It finds games on the internal SSD, the M.2 drive and USB drives.
+Kraken Mount
 
-**Supported formats**: debug FPKG (`.pkg`) and game folders (plain, or packed with zstd or LZ4).
-For large, demanding games, use the zstd pack format: it performs better than FPKG.
+Fork de quer3q/kraken-mount, mantenido por modgames44. Este fork sigue el código base de upstream (0.4.0: instalador nativo, reporte de crashes, auto-actualización, ocultar juegos y backports) y además añade:
 
-## How to
+Telemetría en vivo (CPU del sistema y del payload + RAM), expuesta en /api/telemetry.
+Un tema visual propio, "The Abyss": paleta abisal (teal bioluminiscente + azul mar) con fondo de océano.
+Empaqueta ampr-emu-ng 0.5.7 (la 0.5.1 de quer3q + decodificación LZ4 rápida opcional).
 
-1. Download `kraken-mount.elf` from [Releases](https://github.com/quer3q/kraken-mount/releases)
-   and send it to your jailbroken PS5 with the ELF loader (elfldr, port 9021) or payload-manager:
-   `nc -w 3 <ps5-ip> 9021 < kraken-mount.elf`. ShadowMount+ must not be running: Kraken Mount waits
-   until it stops. kstuff is not needed to start Kraken Mount, but a fake-signed game needs it to start; when such
-   a game fails to start without it, Kraken Mount shows a notification.
-2. Put each game in a scan root, or in a folder directly inside one (for example
-   `/data/homebrew/rpg/<game>`; deeper folders are not scanned, and on a drive root only the root itself):
-   - internal SSD: `/data/homebrew`, `/data/etaHEN/games`
-   - M.2 or extended drive (`/mnt/ext0`, `/mnt/ext1`): `homebrew`, `etaHEN/games` or the drive root
-   - USB drive (`/mnt/usb0` to `/mnt/usb7`): `homebrew`, `etaHEN/games` or the drive root
-3. Each game gets a "<name> registered" notification and its own home-screen tile.
+Un montador de juegos para PS5. Encuentra juegos en el SSD interno, el disco M.2 y unidades USB.
 
-The web UI (port 8097, opened from the "Kraken Mount" home-screen tile) has the **Library** of games, the
-**Install** tab, the **Hidden** and **Backports** screens and the settings.
+Formatos soportados: FPKG debug (.pkg), carpetas de juego (planas, o empaquetadas con zstd o LZ4) e imágenes exFAT (.exfat, o .zstd que contenga una imagen exFAT), montadas en solo lectura como lo hace ShadowMount+. Para juegos grandes y exigentes, usa el formato de empaquetado zstd: rinde mejor que FPKG.
 
-Install to the console: FPKG games install from their game sheet in the Library (**Install**), and the **Install**
-tab lists the patch and DLC `.pkg` files from the scan roots; both hand the `.pkg` to the console's installer. The
-Install tab shows while something is queued, installable or kept, with the queue and the results. A patch needs its
-game installed. This
-needs fpkg-enable and ppr-patch loaded besides kstuff. With the `install_delete_source` setting (the Install tab's
-checkbox, off by default) the source `.pkg` is deleted once the install is done. Games installed on the console
-(`/user/app`, extended storage) show in the Library too; Kraken Mount never mounts, hides or deletes them.
+Cómo usar
+Descarga kraken-mount.elf de Releases y envíalo a tu PS5 jailbrekeada con el cargador de ELF (elfldr, puerto 9021) o payload-manager: nc -w 3 <ip-ps5> 9021 < kraken-mount.elf. kstuff debe estar cargado y ShadowMount+ no debe estar corriendo: Kraken Mount espera hasta que ambas condiciones se cumplan.
+Pon cada juego en una raíz de escaneo, o en una carpeta directamente dentro de una (por ejemplo /data/homebrew/rpg/<juego>; no se escanean carpetas más profundas, y en la raíz de una unidad solo la raíz misma):
+SSD interno: /data/homebrew, /data/etaHEN/games
+M.2 o disco extendido (/mnt/ext0, /mnt/ext1): homebrew, etaHEN/games o la raíz de la unidad
+USB (/mnt/usb0 a /mnt/usb7): homebrew, etaHEN/games o la raíz de la unidad
+Cada juego recibe una notificación de "registered" y su propia tarjeta en el menú principal.
 
-Backports: put the files in a folder `backports/<TITLE_ID>*` in the first scan root (by default
-`/data/homebrew/backports`); setting `backports` (on by default) applies them. A game installed on the console
-takes the whole backport too: its lib dir goes into the fakelib, and its other files are redirected into the game's
-`/app0` at each launch through NSFS redirects (the install itself is not changed). The **Backports** screen lists these
-folders with Delete. The **Hidden** screen lists the hidden games (the `exclude` setting) with Unhide.
+ampr-emu-ng viene incluido y se instala en /data/krakenmount/ampr/ al arrancar. Para usar otra build, pon su libSceAmpr.sprx ahí; se conserva hasta que lo borres.
 
-Updates: at start Kraken Mount checks the latest release on GitHub. When a newer one is out, the
-web UI shows "Kraken Mount <version> is available"; **Update** downloads it and sends it to elfldr
-(port 9021), and the new copy takes over (close the running game first).
+Un juego que necesita el emulador de DLC o PlayGo y no trae ninguno recibe el incluido en su fakelib (ajuste add_emulators, activo por defecto); la copia propia del juego se conserva, salvo que sea una versión conocida más antigua de la incluida, que se actualiza. El stub de PlayGo se puede desactivar por juego en los detalles del juego. Detalles: emulador DLC, stub PlayGo.
 
-To keep it updated with [ps5-payload-manager](https://github.com/itsPLK/ps5-payload-manager), add
-`https://github.com/quer3q/kraken-mount/releases/latest/download/payloads.json` as a custom
-repository. Each published release carries that catalog (the `.elf` and its SHA-256, which the
-manager checks on every download); `latest` is the newest release that is not a pre-release. The
-in-UI **Update** does not change the manager's copy: if the manager loads Kraken Mount at boot, it
-starts the version the manager last installed, so update it in the manager too.
+Para usar otra build en un solo juego (una build debug, por ejemplo), ponla en /data/krakenmount/ampr-titles/<TITLE_ID>/; una carpeta vacía ahí corre ese juego sin ampr-emu-ng. Tras cada lanzamiento, Kraken Mount lee /data/ampr_emu_status.txt y avisa cuando ampr-emu-ng no cargó o reportó un problema (detalles en el log).
 
-[ampr-emu-ng](https://github.com/quer3q/ampr-emu-ng) comes bundled and is installed into
-`/data/krakenmount/ampr/` at start. To run another build, put its `libSceAmpr.sprx` there; it is
-kept until you delete it. For a game installed on the console, ampr-emu-ng is used only with the
-`ampr_installed` setting (off by default); while it is off, the game's own `libSceAmpr.sprx` (the install's,
-hidden at launch through NSFS, and its backport's) is kept out, so the system's runs.
+Depurar un juego: añade su title id a "Debug ampr-emu-ng for these games" en los ajustes (ampr_debug_titles). Ese juego corre entonces la build debug incluida, y mientras corre Kraken Mount guarda sus métricas en /data/krakenmount/debug/<TITLE_ID>/ (también en http://<ip-ps5>:8097/api/debug/<TITLE_ID>/metrics.txt).
 
-A game that needs the DLC or PlayGo emulator and ships none gets the bundled one in its fakelib
-(setting `add_emulators`, on by default); a game's own copy is kept, unless it is a known older
-release of the bundled one, which is upgraded. The PlayGo stub can be turned off per game in the
-game's details. Details:
-[DLC emulator](docs/dlcemu.md), [PlayGo stub](docs/playgo.md).
+Las caches viven en /data/krakenmount/caches/<TITLE_ID>, los ajustes en /data/krakenmount/config.toml y el log en /data/krakenmount/kraken.log.
 
-Caches live in `/data/krakenmount/caches/<TITLE_ID>`, settings in
-`/data/krakenmount/config.toml` and the log in `/data/krakenmount/kraken.log`.
+Para compilarlo tú mismo: ps5/build.sh (necesita Docker), salida en target/ps5/kraken-mount.elf. En WSL/Linux sin Docker, este fork incluye compilar_kraken_wsl.sh (reproduce las dos etapas del build oficial).
 
-To build it yourself: `ps5/build.sh` (needs Docker), output `target/ps5/kraken-mount.elf`.
+Créditos
+drakmor/ShadowMountPlus: el registro en el menú principal, el overlay sandbox de la fakelib y los backports están portados de ahí.
+drakmor/dlc_emu: el emulador de DLC incluido (libSceAppContent.sprx, libSceNpEntitlementAccess.sprx, libSceGameUpdate.sprx), añadido a la fakelib de un juego cuando este tiene un dlc_emu.ini en su raíz; una versión conocida más antigua que traiga el juego se actualiza, cualquier otra copia se conserva.
+drakmor/pgo_stub: el stub de PlayGo incluido (libScePlayGo.sprx), añadido a la fakelib cuando el eboot.bin importa libScePlayGo y el juego no trae ninguno.
+devchmod/TITAN-CORE (GPL-3.0-or-later): el muestreador de telemetría en vivo (telemetry.rs, telemetry_math.rs) está portado de ahí.
+ps5-payload-sdk: el toolchain del PS5.
+Licencia
 
-## Thanks
-
-- [drakmor/ShadowMountPlus](https://github.com/drakmor/ShadowMountPlus): home-screen
-  registration, the fakelib sandbox overlay and backports are ported from it.
-- [drakmor/dlc_emu](https://github.com/drakmor/dlc_emu): the bundled DLC emulator
-  (`libSceAppContent.sprx`, `libSceNpEntitlementAccess.sprx`, `libSceGameUpdate.sprx`), added to a
-  game's fakelib when the game has a `dlc_emu.ini` at its root; a known older release the game ships
-  is upgraded, any other copy is kept.
-- [drakmor/pgo_stub](https://github.com/drakmor/pgo_stub): the bundled PlayGo stub
-  (`libScePlayGo.sprx`), added to a game's fakelib when its `eboot.bin` imports `libScePlayGo` and the
-  game ships none.
-- [ps5-payload-sdk](https://github.com/ps5-payload-dev/sdk): the PS5 toolchain.
-- [quer3q/ps5-dump-forge](https://github.com/quer3q/ps5-dump-forge): the console install path
-  (`ps5/installer.c`), the build setup, the self copy, the home-screen tile and the toasts.
-
-## License
-
-GPL-3.0-or-later (`LICENSE`). Third-party notices are in `THIRD_PARTY_NOTICES`.
+GPL-3.0-or-later (LICENSE). Los avisos de terceros están en THIRD_PARTY_NOTICES.
