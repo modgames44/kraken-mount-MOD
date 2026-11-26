@@ -277,20 +277,21 @@ pub fn deleted(l: Lang, name: &str) -> String {
     }
 }
 
-/// kstuff does not answer its readiness probe: start-up waits for it (SMP SM_L10N_KSTUFF_WAITING).
-pub fn kstuff_waiting(l: Lang) -> &'static str {
+/// A fake-signed title's sandbox went (or timed out) without its game process and the kstuff probe
+/// does not answer (launch.rs).
+pub fn kstuff_missing(l: Lang, tid: &str) -> String {
     match l {
-        Lang::En => "Kraken Mount: kstuff not found; waiting for it to start",
-        Lang::Ru => "Kraken Mount: kstuff не найден; ожидание его запуска",
-        Lang::Zh => "Kraken Mount：未找到 kstuff，正在等待其启动",
-        Lang::De => "Kraken Mount: kstuff nicht gefunden; warte auf den Start",
-        Lang::Es => "Kraken Mount: no se encontró kstuff; esperando a que se inicie",
-        Lang::Fr => "Kraken Mount : kstuff introuvable ; en attente de son démarrage",
-        Lang::Ja => "Kraken Mount: kstuff が見つかりません。起動を待っています",
-        Lang::Pt => "Kraken Mount: kstuff não encontrado; aguardando sua inicialização",
-        Lang::It => "Kraken Mount: kstuff non trovato; in attesa del suo avvio",
-        Lang::Ko => "Kraken Mount: kstuff를 찾을 수 없습니다. 시작될 때까지 기다리는 중입니다",
-        Lang::Ar => "Kraken Mount: لم يتم العثور على kstuff؛ جارٍ انتظار تشغيله",
+        Lang::En => format!("Kraken Mount: {tid} did not start: kstuff is not running"),
+        Lang::Ru => format!("Kraken Mount: {tid} не запустилась: kstuff не запущен"),
+        Lang::Zh => format!("Kraken Mount：{tid} 未能启动：kstuff 未运行"),
+        Lang::De => format!("Kraken Mount: {tid} ist nicht gestartet: kstuff läuft nicht"),
+        Lang::Es => format!("Kraken Mount: {tid} no se inició: kstuff no se está ejecutando"),
+        Lang::Fr => format!("Kraken Mount : {tid} n'a pas démarré : kstuff n'est pas lancé"),
+        Lang::Ja => format!("Kraken Mount: {tid} を起動できませんでした: kstuff が実行されていません"),
+        Lang::Pt => format!("Kraken Mount: {tid} não iniciou: o kstuff não está em execução"),
+        Lang::It => format!("Kraken Mount: {tid} non si è avviato: kstuff non è in esecuzione"),
+        Lang::Ko => format!("Kraken Mount: {tid}이(가) 시작되지 않았습니다: kstuff가 실행 중이 아닙니다"),
+        Lang::Ar => format!("Kraken Mount: لم يبدأ {tid}: kstuff لا يعمل"),
     }
 }
 
@@ -308,58 +309,5 @@ pub fn smp_running(l: Lang) -> &'static str {
         Lang::It => "Kraken Mount: ShadowMount+ è in esecuzione; in attesa che si arresti",
         Lang::Ko => "Kraken Mount: ShadowMount+가 실행 중입니다. 종료될 때까지 기다리는 중입니다",
         Lang::Ar => "Kraken Mount: ShadowMount+ قيد التشغيل؛ جارٍ انتظار إيقافه",
-    }
-}
-
-/// The ampr dir's libSceAmpr.sprx has no pkg mode (an upstream ampr_emu, say): pkg games will start
-/// without their files.
-pub fn ampr_no_pkg(l: Lang, path: &str) -> String {
-    match l {
-        Lang::En => format!("Kraken Mount: {path} has no pkg mode; pkg games will not run with it"),
-        Lang::Ru => format!("Kraken Mount: в {path} нет режима pkg; игры pkg с ним не запустятся"),
-        Lang::Zh => format!("Kraken Mount：{path} 不支持 pkg 模式，pkg 游戏将无法运行"),
-        Lang::De => format!("Kraken Mount: {path} hat keinen pkg-Modus; pkg-Spiele laufen damit nicht"),
-        Lang::Es => format!("Kraken Mount: {path} no tiene modo pkg; los juegos pkg no funcionarán con él"),
-        Lang::Fr => format!("Kraken Mount : {path} n'a pas de mode pkg ; les jeux pkg ne fonctionneront pas"),
-        Lang::Ja => format!("Kraken Mount: {path} には pkg モードがありません。pkg ゲームは動作しません"),
-        Lang::Pt => format!("Kraken Mount: {path} não tem modo pkg; jogos pkg não funcionarão com ele"),
-        Lang::It => format!("Kraken Mount: {path} non ha la modalità pkg; i giochi pkg non funzioneranno"),
-        Lang::Ko => format!("Kraken Mount: {path}에 pkg 모드가 없습니다. pkg 게임이 실행되지 않습니다"),
-        Lang::Ar => format!("Kraken Mount: لا يحتوي {path} على وضع pkg؛ لن تعمل ألعاب pkg معه"),
-    }
-}
-
-/// A launch of one of our titles where ng did not start (no fresh /data/ampr_emu_status.txt):
-/// the game ran with the system libSceAmpr.
-pub fn ng_not_loaded(l: Lang, name: &str) -> String {
-    match l {
-        Lang::En => format!("{name}: ampr-emu-ng did not load; see the log"),
-        Lang::Ru => format!("{name}: ampr-emu-ng не загрузился; см. журнал"),
-        Lang::Zh => format!("{name}：ampr-emu-ng 未加载，请查看日志"),
-        Lang::De => format!("{name}: ampr-emu-ng wurde nicht geladen; siehe Protokoll"),
-        Lang::Es => format!("{name}: ampr-emu-ng no se cargó; consulta el registro"),
-        Lang::Fr => format!("{name}\u{202f}: ampr-emu-ng ne s'est pas chargé ; voir le journal"),
-        Lang::Ja => format!("{name}：ampr-emu-ng が読み込まれませんでした。ログを確認してください"),
-        Lang::Pt => format!("{name}: o ampr-emu-ng não carregou; veja o log"),
-        Lang::It => format!("{name}: ampr-emu-ng non è stato caricato; vedi il log"),
-        Lang::Ko => format!("{name}: ampr-emu-ng가 로드되지 않았습니다. 로그를 확인하세요"),
-        Lang::Ar => format!("{name}: لم يتم تحميل ampr-emu-ng؛ راجع السجل"),
-    }
-}
-
-/// ng loaded but reported a problem (hooks that did not install, an index it could not load).
-pub fn ng_problem(l: Lang, name: &str, what: &str) -> String {
-    match l {
-        Lang::En => format!("{name}: ampr-emu-ng: {what}"),
-        Lang::Ru => format!("{name}: ampr-emu-ng: {what}"),
-        Lang::Zh => format!("{name}：ampr-emu-ng：{what}"),
-        Lang::De => format!("{name}: ampr-emu-ng: {what}"),
-        Lang::Es => format!("{name}: ampr-emu-ng: {what}"),
-        Lang::Fr => format!("{name}\u{202f}: ampr-emu-ng : {what}"),
-        Lang::Ja => format!("{name}：ampr-emu-ng：{what}"),
-        Lang::Pt => format!("{name}: ampr-emu-ng: {what}"),
-        Lang::It => format!("{name}: ampr-emu-ng: {what}"),
-        Lang::Ko => format!("{name}: ampr-emu-ng: {what}"),
-        Lang::Ar => format!("{name}: ampr-emu-ng: {what}"),
     }
 }

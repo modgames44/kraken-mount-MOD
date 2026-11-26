@@ -6,13 +6,16 @@
 //! nothing here reads it, so it is skipped.
 
 use crate::sys::nmount;
+use std::collections::HashSet;
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::fs;
 use std::io::{self, ErrorKind};
 use std::os::unix::fs::DirBuilderExt;
 use std::path::{Path, PathBuf};
 use std::ptr;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
+use std::time::SystemTime;
 
 const APP_BASE: &str = "/user/app";
 const SYSTEM_EX_APP: &str = "/system_ex/app";
@@ -47,7 +50,7 @@ fn patch_param_json(buf: &mut Vec<u8>) -> bool {
 fn copy_file(title_id: &str, src: &Path, dst: &Path) -> io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
     if src.file_name().is_some_and(|n| n == "param.json") {
-        let mut buf = fs::read(src)?;
+        let mut buf = crate::scan::read_capped(src, 1 << 20)?;
         let patched = patch_param_json(&mut buf);
         fs::write(dst, &buf)?;
         if patched {
@@ -315,7 +318,10 @@ fn resolve_symbol(nid: &[u8], name: &[u8], label: &str) -> Result<*mut c_void, S
     APP_INST_INIT.get_or_init(|| {
         let rc = unsafe { sceUserServiceInitialize(ptr::null()) };
         log!("sceUserServiceInitialize: {:#x}", rc as u32);
-        let rc = unsafe { sceAppInstUtilInitialize() };
+        let rc = {
+            let _appinst = crate::install::AppInst::lock();
+            unsafe { sceAppInstUtilInitialize() }
+        };
         log!("sceAppInstUtilInitialize: {:#x}", rc as u32);
     });
     let lib = CString::new(APP_INST_UTIL).expect("no NUL");
@@ -371,7 +377,10 @@ fn resolve_uninstall() -> Result<UninstallTitle, String> {
 pub fn uninstall(tid: &str) -> io::Result<()> {
     let f = UNINSTALL_FN.get_or_init(resolve_uninstall).as_ref().map_err(|e| err(e.clone()))?;
     let title_id = CString::new(tid).map_err(|_| err(format!("NUL in {tid}")))?;
-    let rc = unsafe { f(title_id.as_ptr()) } as u32;
+    let rc = {
+        let _appinst = crate::install::AppInst::lock();
+        (unsafe { f(title_id.as_ptr()) }) as u32
+    };
     if rc == 0 { Ok(()) } else { Err(err(format!("sceAppInstUtilAppUnInstall({tid}): {rc:#x}"))) }
 }
 
@@ -391,7 +400,10 @@ fn install_title_dir(title_id: &str) -> io::Result<()> {
     let f = *INSTALL_FN.get_or_init(resolve_install).as_ref().map_err(|e| err(e.clone()))?;
     let tid = CString::new(title_id).map_err(|_| err(format!("NUL in {title_id}")))?;
     let base = CString::new(format!("{APP_BASE}/")).expect("no NUL");
-    let rc = unsafe { f(tid.as_ptr(), base.as_ptr(), ptr::null_mut()) } as u32;
+    let rc = {
+        let _appinst = crate::install::AppInst::lock();
+        (unsafe { f(tid.as_ptr(), base.as_ptr(), ptr::null_mut()) }) as u32
+    };
     if rc == 0 || rc == ALREADY_INSTALLED {
         return Ok(());
     }
@@ -406,12 +418,27 @@ pub fn install_all(title_ids: &[String]) -> io::Result<()> {
         fn sceAppInstUtilAppInstallAll(reserved: *mut c_void) -> i32;
     }
     let why = INSTALL_FN.get_or_init(resolve_install).as_ref().err().cloned().unwrap_or_default();
+    // Taken before the call: a tile staged while it runs (the tile thread) waits for the next pass
+    // instead of being marked registered by a call that never saw it.
+    // ponytail: taken either way: a failed tile keeps tile.ok "pending" and gets no retry until the
+    // next start, so a failing call does not repeat (~20 s) every pass.
+    let tile = TILE_STAGED.lock().unwrap().take();
     let t = std::time::Instant::now();
-    let rc = unsafe { sceAppInstUtilAppInstallAll(ptr::null_mut()) } as u32;
+    let rc = {
+        let _appinst = crate::install::AppInst::lock();
+        (unsafe { sceAppInstUtilAppInstallAll(ptr::null_mut()) }) as u32
+    };
     let ms = t.elapsed().as_millis();
-    log!("{}: {why}; sceAppInstUtilAppInstallAll: {rc:#x} ({ms} ms)", title_ids.join(", "));
+    let ids: Vec<&str> = title_ids.iter().map(String::as_str).chain(tile.as_ref().map(|_| TILE_ID)).collect();
+    log!("{}: {why}; sceAppInstUtilAppInstallAll: {rc:#x} ({ms} ms)", ids.join(", "));
     if rc != 0 {
         return Err(err(format!("sceAppInstUtilAppInstallAll: {rc:#x}")));
+    }
+    if let Some(hash) = tile {
+        match fs::write(TILE_MARKER, format!("{hash}\n")) {
+            Ok(()) => log!("tile {TILE_ID}: registered"),
+            Err(e) => log!("tile {TILE_ID}: registered, but write {TILE_MARKER} failed: {e}"),
+        }
     }
     for tid in title_ids {
         spawn_snd0info(tid, 200);
@@ -428,12 +455,6 @@ pub fn register(title_id: &str, app0: &Path, sce_sys: &Path, backport: Option<&P
 }
 
 fn register_inner(title_id: &str, app0: &Path, sce_sys: &Path, backport: Option<&Path>) -> io::Result<bool> {
-    // Best-effort: snapshot the title's existing metadata before the copies below overwrite it.
-    // Never blocks registration; a failure is only logged.
-    let data_free = crate::storage::drives().into_iter().find(|d| d.mount == "/data").map_or(0, |d| d.free);
-    if let Err(e) = crate::backup::before_register(title_id, data_free) {
-        log!("{title_id}: metadata snapshot skipped: {e}");
-    }
     let app_dir = Path::new(APP_BASE).join(title_id);
     let user_sce_sys = app_dir.join("sce_sys");
     ctx(copy_dir(title_id, sce_sys, &user_sce_sys), || {
@@ -478,13 +499,8 @@ pub fn is_ours(title_id: &str) -> Result<(), PathBuf> {
 /// `is_ours` under `root` (a fake tree in tests).
 fn is_ours_in(root: &Path, title_id: &str) -> Result<(), PathBuf> {
     let app = root.join("user/app").join(title_id);
-    for p in [app.join("app.pkg"), root.join("mnt/ext0/user/app").join(title_id),
-        root.join("mnt/ext1/user/app").join(title_id)]
-    {
-        // Only ENOENT/ENOTDIR is "absent": a stat error (a drive that answers badly) protects.
-        if !matches!(fs::symlink_metadata(&p), Err(e) if matches!(e.raw_os_error(), Some(libc::ENOENT | libc::ENOTDIR))) {
-            return Err(p);
-        }
+    if let Some(p) = crate::installed::copy_in(root, title_id) {
+        return Err(p);
     }
     if !app.join("sce_sys/param.json").is_file() {
         return Err(app);
@@ -500,26 +516,80 @@ extern "C" {
 /// The scan thread and the launch watcher both write app.db.
 static APP_DB_LOCK: Mutex<()> = Mutex::new(());
 
+const APP_DB_WAL: &str = "/system_data/priv/mms/app.db-wal";
+/// ?1 = comma-joined title ids: one statement, so one write transaction for any number of titles
+/// (a no-op UPDATE still takes the write lock). ponytail: instr() scans tbl_contentinfo (a few
+/// hundred rows); title ids are [A-Z0-9], never a comma.
+const SND0_SQL: &str = "UPDATE tbl_contentinfo SET snd0info = '/user/appmeta/' || titleId || '/snd0.at9' \
+    WHERE instr(',' || ?1 || ',', ',' || titleId || ',') > 0 \
+    AND snd0info IS NOT '/user/appmeta/' || titleId || '/snd0.at9'";
+
+type DbStamp = (Option<(SystemTime, u64)>, Option<(SystemTime, u64)>);
+static LAST_APP_DB_STAMP: Mutex<Option<DbStamp>> = Mutex::new(None);
+static SND0_SYNCING: AtomicBool = AtomicBool::new(false);
+
+fn file_stamp(p: &str) -> Option<(SystemTime, u64)> {
+    let m = fs::metadata(p).ok()?;
+    Some((m.modified().ok()?, m.len()))
+}
+
+fn app_db_stamp() -> DbStamp {
+    (file_stamp(APP_DB), file_stamp(APP_DB_WAL))
+}
+
+fn has_snd0(tid: &str) -> bool {
+    Path::new(APPMETA_BASE).join(tid).join("snd0.at9").is_file()
+}
+
+/// One UPDATE for every title in `tids` with a snd0.at9. False when it failed (logged).
+fn exec_snd0info(tids: &[&str]) -> bool {
+    let ids = tids.iter().copied().filter(|t| has_snd0(t)).collect::<Vec<_>>().join(",");
+    if ids.is_empty() {
+        return true;
+    }
+    let (Ok(path), Ok(sql), Ok(arg)) = (CString::new(APP_DB), CString::new(SND0_SQL), CString::new(ids.as_str())) else {
+        return false;
+    };
+    let mut msg = [0 as c_char; 256];
+    let rows = {
+        let _guard = APP_DB_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe { km_sqlite_exec1(path.as_ptr(), sql.as_ptr(), arg.as_ptr(), msg.as_mut_ptr(), msg.len()) }
+    };
+    if rows > 0 {
+        log!("{ids}: snd0info set ({rows} row(s))");
+    } else if rows < 0 {
+        let e = unsafe { CStr::from_ptr(msg.as_ptr()) }.to_string_lossy();
+        log!("{ids}: snd0info update in {APP_DB} failed: {e}");
+    }
+    rows >= 0
+}
+
 /// SMP update_snd0info (sm_appdb.c): point app.db's snd0info at /user/appmeta/<TID>/snd0.at9 so
 /// the home screen plays the title sound. Only when that file exists; errors are logged only.
 pub fn set_snd0info(title_id: &str) {
-    if !Path::new(APPMETA_BASE).join(title_id).join("snd0.at9").is_file() {
+    exec_snd0info(&[title_id]);
+}
+
+/// When app.db or its WAL changed (mtime/size) since the last good sync, one background UPDATE
+/// for the registered titles. Installed games are skipped: their row is the system's. A failed
+/// sync keeps the old stamp, so the next pass retries it.
+pub fn sync_snd0info_if_changed(tids: &HashSet<String>) {
+    let stamp = app_db_stamp();
+    if *LAST_APP_DB_STAMP.lock().unwrap_or_else(|e| e.into_inner()) == Some(stamp) {
         return;
     }
-    const SQL: &str = "UPDATE tbl_contentinfo SET snd0info = '/user/appmeta/' || ?1 || '/snd0.at9' \
-        WHERE titleId = ?1 AND snd0info IS NOT '/user/appmeta/' || ?1 || '/snd0.at9'";
-    let (Ok(path), Ok(sql), Ok(tid)) = (CString::new(APP_DB), CString::new(SQL), CString::new(title_id)) else {
+    if SND0_SYNCING.swap(true, Ordering::SeqCst) {
         return;
-    };
-    let mut msg = [0 as c_char; 256];
-    let _guard = APP_DB_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let rows = unsafe { km_sqlite_exec1(path.as_ptr(), sql.as_ptr(), tid.as_ptr(), msg.as_mut_ptr(), msg.len()) };
-    if rows > 0 {
-        log!("{title_id}: snd0info set ({rows} row(s))");
-    } else if rows < 0 {
-        let e = unsafe { CStr::from_ptr(msg.as_ptr()) }.to_string_lossy();
-        log!("{title_id}: snd0info update in {APP_DB} failed: {e}");
     }
+    let list: Vec<String> =
+        tids.iter().filter(|t| has_snd0(t) && !crate::installed::is_installed(t)).cloned().collect();
+    std::thread::spawn(move || {
+        let refs: Vec<&str> = list.iter().map(String::as_str).collect();
+        if exec_snd0info(&refs) {
+            *LAST_APP_DB_STAMP.lock().unwrap_or_else(|e| e.into_inner()) = Some(app_db_stamp());
+        }
+        SND0_SYNCING.store(false, Ordering::SeqCst);
+    });
 }
 
 /// True when the title is on the home screen already: /user/app/<TID>/sce_sys/param.json,
@@ -541,6 +611,44 @@ pub fn is_registered(title_id: &str) -> bool {
     }
 }
 
+/// is_registered for many titles (web API status) with one pass over one app.db read, in `tids` order.
+
+static DB_READ_FAILED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// ponytail: read on every call (each /api/state poll); app.db is a few MB at most.
+pub fn registered(tids: &[&str]) -> Vec<bool> {
+    let staged: Vec<bool> = tids
+        .iter()
+        .map(|t| {
+            Path::new(APP_BASE).join(t).join("sce_sys/param.json").is_file()
+                && Path::new(APPMETA_BASE).join(t).join("param.json").is_file()
+        })
+        .collect();
+    if !staged.contains(&true) {
+        return staged;
+    }
+    let db = match fs::read(APP_DB) {
+        Ok(db) => db,
+        Err(e) => {
+            // Once until it reads again: /api/state polls this every second or two per open UI.
+            if !DB_READ_FAILED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                log!("read {APP_DB}: {e}; titles shown as not registered");
+            }
+            return vec![false; tids.len()];
+        }
+    };
+    DB_READ_FAILED.store(false, std::sync::atomic::Ordering::Relaxed);
+    let wanted: HashSet<&[u8]> = tids.iter().zip(&staged).filter(|(_, s)| **s).map(|(t, _)| t.as_bytes()).collect();
+    // Every TID-shaped 9-byte run of app.db (a TID is 9 bytes, crate::scan::valid_tid).
+    let mut found: HashSet<&[u8]> = HashSet::new();
+    for w in db.windows(9) {
+        if w[0].is_ascii_uppercase() && wanted.contains(w) {
+            found.insert(w);
+        }
+    }
+    tids.iter().zip(staged).map(|(t, s)| s && found.contains(t.as_bytes())).collect()
+}
+
 /// Only the nullfs `app0` -> /system_ex/app/<TID> (+ backport unionfs) of `register`, for a
 /// title already registered; a no-op when it is mounted (it is gone after a reboot).
 pub fn mount(title_id: &str, app0: &Path, backport: Option<&Path>) -> io::Result<()> {
@@ -552,6 +660,22 @@ pub fn mount(title_id: &str, app0: &Path, backport: Option<&Path>) -> io::Result
 /// MNT_FORCE: a running game's stack fails with EBUSY.
 pub fn remount(title_id: &str, app0: &Path, backport: Option<&Path>) -> io::Result<()> {
     ctx(mount_inner(title_id, app0, backport, false), || format!("remount {title_id} ({})", app0.display()))
+}
+
+/// The stack at /system_ex/app/<TID> without its backport unionfs, before the backport is deleted:
+/// redone on `app0` alone when something is mounted there. Never MNT_FORCE: busy = EBUSY.
+pub fn drop_backport(title_id: &str, app0: &Path) -> io::Result<()> {
+    match mount_source(&format!("{SYSTEM_EX_APP}/{title_id}")) {
+        Ok(None) => Ok(()),
+        // Never registered (no mount point yet): no stack to redo. A stale stack (its drive gone)
+        // answers ENOENT too, but its name is still listed in /system_ex/app.
+        Err(e) if matches!(e.raw_os_error(), Some(libc::ENOENT | libc::ENOTDIR))
+            && fs::read_dir(SYSTEM_EX_APP)
+                .and_then(|d| d.map(|x| x.map(|x| x.file_name())).collect::<io::Result<Vec<_>>>())
+                .is_ok_and(|names| !names.iter().any(|n| n == title_id)) => Ok(()),
+        Err(e) => Err(e),
+        Ok(Some(_)) => remount(title_id, app0, None),
+    }
 }
 
 /// `keep_active`: keep a live overlay of the same backport (fresh cache). A full register
@@ -579,10 +703,17 @@ fn mount_inner(title_id: &str, app0: &Path, backport: Option<&Path>, keep_active
 /// ps5-dump-forge tile.rs). Only sce_sys is written, as dump-forge does: no appmeta, no
 /// /system_ex, no eboot.
 const TILE_ID: &str = "KRKN00001";
-/// Marks /user/app/KRKN00001 as ours: "pending" while not yet registered, else the param.json
-/// hash of the last successful registration.
+/// "pending" while not yet registered, else the param.json hash of the last successful registration.
 const TILE_MARKER: &str = "/data/krakenmount/tile.ok";
 const TILE_ICON: &[u8] = include_bytes!("../ps5/icon0.png");
+/// FW 12+ (no TitleDir): the param.json hash of a tile staged in /user/app, waiting for the scan
+/// pass's `install_all` (InstallAll registers it with every other /user/app folder).
+static TILE_STAGED: Mutex<Option<String>> = Mutex::new(None);
+
+/// A staged tile waits for `install_all`: the scan pass calls it even with no game staged.
+pub fn tile_staged() -> bool {
+    TILE_STAGED.lock().unwrap().is_some()
+}
 
 fn tile_param_json(port: u16) -> Vec<u8> {
     let param = serde_json::json!({
@@ -616,16 +747,27 @@ fn write_if_changed(path: &Path, bytes: &[u8]) -> io::Result<bool> {
     Ok(true)
 }
 
+/// Rows of the tile in app.db's tbl_contentinfo (SMP's title list table); None when app.db
+/// cannot be queried (logged).
+fn tile_in_app_db() -> Option<bool> {
+    const SQL: &str = "SELECT COUNT(*) FROM tbl_contentinfo WHERE titleId = ?1";
+    let (path, sql, tid) = (CString::new(APP_DB).ok()?, CString::new(SQL).ok()?, CString::new(TILE_ID).ok()?);
+    let mut msg = [0 as c_char; 256];
+    let _guard = APP_DB_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let rows = unsafe { km_sqlite_exec1(path.as_ptr(), sql.as_ptr(), tid.as_ptr(), msg.as_mut_ptr(), msg.len()) };
+    if rows < 0 {
+        let e = unsafe { CStr::from_ptr(msg.as_ptr()) }.to_string_lossy();
+        log!("tile {TILE_ID}: query {APP_DB} failed: {e}; trusting {TILE_MARKER}");
+        return None;
+    }
+    Some(rows > 0)
+}
+
+/// Registers the tile when tile.ok lacks the current param.json hash, a file changed, or app.db
+/// has no row for it (a wiped /data/krakenmount, or the system dropped it).
 fn ensure_tile(port: u16) -> io::Result<String> {
     let app_dir = Path::new(APP_BASE).join(TILE_ID);
     let marker = fs::read_to_string(TILE_MARKER).ok().map(|s| s.trim().to_string());
-    if marker.is_none() && fs::symlink_metadata(&app_dir).is_ok() {
-        return Ok(format!("{} exists without {TILE_MARKER}; left alone", app_dir.display()));
-    }
-    if marker.is_none() {
-        // Claim the folder before creating it, so a failed registration is retried.
-        ctx(fs::write(TILE_MARKER, "pending\n"), || format!("write {TILE_MARKER}"))?;
-    }
     let sys = app_dir.join("sce_sys");
     ctx(fs::create_dir_all(&sys), || format!("mkdir {}", sys.display()))?;
     let param = tile_param_json(port);
@@ -636,10 +778,19 @@ fn ensure_tile(port: u16) -> io::Result<String> {
             written.push(name);
         }
     }
-    if written.is_empty() && marker.as_deref() == Some(hash.as_str()) {
+    // ponytail: app.db unreadable = trust the marker, so a FW 12+ start does not pay ~20 s for nothing.
+    let in_db = tile_in_app_db();
+    if written.is_empty() && marker.as_deref() == Some(hash.as_str()) && in_db != Some(false) {
         return Ok(format!("up to date (port {port})"));
     }
+    if in_db == Some(false) {
+        log!("tile {TILE_ID}: not in {APP_DB}; registering it");
+    }
     ctx(fs::write(TILE_MARKER, "pending\n"), || format!("write {TILE_MARKER}"))?;
+    if INSTALL_FN.get_or_init(resolve_install).is_err() {
+        *TILE_STAGED.lock().unwrap() = Some(hash);
+        return Ok(format!("staged for the next sceAppInstUtilAppInstallAll, wrote {written:?}"));
+    }
     install_title_dir(TILE_ID)?;
     ctx(fs::write(TILE_MARKER, format!("{hash}\n")), || format!("write {TILE_MARKER}"))?;
     Ok(format!("registered, deeplink http://127.0.0.1:{port}/, wrote {written:?}"))

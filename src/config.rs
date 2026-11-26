@@ -7,10 +7,18 @@ pub const CONFIG_PATH: &str = "/data/krakenmount/config.toml";
 #[derive(Clone, PartialEq, Debug)]
 pub struct Settings {
     pub scan_paths: Vec<String>,
+    /// Absolute paths whose sources (the path itself or anything under it) the scan skips.
+    pub exclude: Vec<String>,
     pub inject_ampr: bool,
+    /// Installed games (Kind::Installed) get /data/krakenmount/ampr/* in their fakelib.
+    pub ampr_installed: bool,
+    /// Delete the source .pkg after the console reports its install done (install.rs).
+    pub install_delete_source: bool,
     pub add_emulators: bool,
     /// Title ids that get no bundled PlayGo stub (pgo_stub): not added, not upgraded.
     pub playgo_off: Vec<String>,
+    /// Title ids that get an empty fakelib/ (no overlay at launch: no game fakelib, ampr-emu-ng or emulators).
+    pub overlay_off: Vec<String>,
     pub ampr_auto_update: bool,
     pub backports: bool,
     pub scan_interval_secs: u64,
@@ -24,30 +32,29 @@ pub struct Settings {
     /// Write /data/krakenmount/kraken.log (the payload's stdout always gets the lines).
     pub log: bool,
     pub debug: bool,
-    /// pkg: copy video files (.bk2, .usm, .mp4, ...) out of the pkg into the cache, so the kernel
-    /// reads them directly instead of ng (more space on the internal SSD).
-    pub extract_media: bool,
-    /// pkg: write ng's runtime profile (one decode worker kept for small reads).
-    pub pkg_profile: bool,
-    /// Run PS5 debug packages already installed under /user/app (and connected drives) through the
-    /// cache/AMPR pipeline, prepared in place (installed.rs). Off by default.
-    pub run_installed: bool,
-    /// GitHub `owner/repo` whose latest release the ampr-emu-ng auto-update installs: a fork that
-    /// publishes its own libSceAmpr.sprx points it at itself, so an upstream release does not
-    /// replace the fork's build.
-    pub ampr_update_repo: String,
-    /// Title ids that get the bundled debug ng (`libSceAmpr-debug.sprx`): /metrics on port 9090,
-    /// saved by the launch watcher to /data/krakenmount/debug/<TID>/ while the game runs.
-    pub ampr_debug_titles: Vec<String>,
+    pub ui_theme: String,
+    pub ui_scheme: String,
+    pub ui_sidebar_collapsed: bool,
+    /// "" = the browser's language.
+    pub ui_lang: String,
 }
+
+pub const UI_THEMES: &[&str] = &["dark", "light"];
+pub const UI_SCHEMES: &[&str] = &["abyss", "ember", "moss"];
+/// The LANGS table in ui.html.
+pub const UI_LANGS: &[&str] = &["en", "ru", "zh", "de", "es", "fr", "ja", "pt", "it", "ko", "ar"];
 
 impl Default for Settings {
     fn default() -> Self {
         Settings {
             scan_paths: Vec::new(),
+            exclude: Vec::new(),
             inject_ampr: true,
+            ampr_installed: false,
+            install_delete_source: false,
             add_emulators: true,
             playgo_off: Vec::new(),
+            overlay_off: Vec::new(),
             ampr_auto_update: true,
             backports: true,
             scan_interval_secs: 10,
@@ -58,11 +65,10 @@ impl Default for Settings {
             notify: true,
             log: true,
             debug: false,
-            extract_media: false,
-            pkg_profile: true,
-            run_installed: false,
-            ampr_update_repo: DEFAULT_UPDATE_REPO.to_string(),
-            ampr_debug_titles: Vec::new(),
+            ui_theme: "dark".into(),
+            ui_scheme: "abyss".into(),
+            ui_sidebar_collapsed: false,
+            ui_lang: String::new(),
         }
     }
 }
@@ -70,9 +76,13 @@ impl Default for Settings {
 
 const HELP: &[(&str, &str)] = &[
     ("scanpath", "replaces the default scan roots (/data/homebrew, /data/etaHEN/games, <drive>/homebrew, ...)"),
+    ("exclude", "absolute paths the scan skips: a source at one of them or under it is not listed or registered (a registered title stays registered)"),
     ("inject_ampr", "true = copy /data/krakenmount/ampr/* on top of a folder game's fakelib (pkg games always get it; a change only refreshes fakelib/)"),
+    ("ampr_installed", "true = copy /data/krakenmount/ampr/* on top of an installed game's fakelib (a change only refreshes fakelib/)"),
+    ("install_delete_source", "true = delete the source .pkg once the console reports its install done (Install tab)"),
     ("add_emulators", "true = add the bundled DLC (dlc_emu) and PlayGo (pgo_stub) emulators to a game's fakelib when it needs them and ships none (a change only refreshes fakelib/)"),
     ("playgo_off", "title ids that get no bundled PlayGo stub (pgo_stub): not added, not upgraded; a libScePlayGo.sprx the game ships stays (a change only refreshes fakelib/)"),
+    ("overlay_off", "title ids (folder and installed games; a pkg game keeps its overlay) that get no fakelib overlay at launch: not the game's fakelib/, not ampr-emu-ng, not the emulators (a change only refreshes fakelib/)"),
     ("ampr_auto_update", "true = once per start, download a newer ampr-emu-ng release from GitHub (a hand-placed libSceAmpr.sprx is kept)"),
     ("backports", "true = apply backports/<TID>* from the game's scan root, then the other roots, then /data/homebrew"),
     ("scan_interval_seconds", "scan loop period, 1..3600"),
@@ -83,33 +93,25 @@ const HELP: &[(&str, &str)] = &[
     ("notify", "true = system toasts"),
     ("log", "true = write /data/krakenmount/kraken.log (starts over past 1 MiB)"),
     ("debug", "true = klog capture to /data/krakenmount/klog.txt and the /file/data/... route"),
-    ("extract_media", "true = pkg games: copy video files (.bk2 .usm .mp4 ...) out of the pkg into the cache (rebuilds pkg caches; uses more internal SSD space)"),
-    ("pkg_profile", "true = pkg games: ng keeps one decode worker for small reads (audio/video streams)"),
-    ("run_installed", "true = also run PS5 debug packages already installed under /user/app (and connected drives) through the cache/AMPR pipeline, prepared in place"),
-    ("ampr_update_repo", "GitHub owner/repo whose latest release ampr_auto_update installs (a fork: its own repo)"),
-    ("ampr_debug_titles", "array of title ids that run the bundled debug ampr-emu-ng; reports in /data/krakenmount/debug/<TID>/"),
+    ("ui_theme", "web UI theme: \"dark\" or \"light\""),
+    ("ui_scheme", "web UI color scheme: \"abyss\", \"ember\" or \"moss\""),
+    ("ui_sidebar_collapsed", "true = the web UI sidebar shows icons only"),
+    ("ui_lang", "web UI language: \"\" = the browser's, or en, ru, zh, de, es, fr, ja, pt, it, ko, ar"),
 ];
-
-/// The auto-update source of upstream kraken-mount.
-pub const DEFAULT_UPDATE_REPO: &str = "quer3q/ampr-emu-ng";
-
-/// `owner/repo` as GitHub allows them: ASCII letters, digits, `-`, `_`, `.`; one `/`.
-fn valid_repo(v: &str) -> bool {
-    let ok = |p: &str| !p.is_empty() && p.len() <= 100 && p != "." && p != ".." && p.bytes().all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b));
-    matches!(v.split_once('/'), Some((o, r)) if ok(o) && ok(r))
-}
-
-/// A PS5 title id: 4 letters, 5 digits (PPSA01234, CUSA01234).
-pub fn valid_tid(v: &str) -> bool {
-    let b = v.as_bytes();
-    b.len() == 9 && b[..4].iter().all(u8::is_ascii_alphabetic) && b[4..].iter().all(u8::is_ascii_digit)
-}
 
 fn flag(v: &str) -> Result<bool, String> {
     match v {
         "1" | "true" => Ok(true),
         "0" | "false" => Ok(false),
         _ => Err(format!("expected 0 or 1, got {v:?}")),
+    }
+}
+
+fn one_of(v: &str, allowed: &[&str]) -> Result<String, String> {
+    if allowed.contains(&v) {
+        Ok(v.to_string())
+    } else {
+        Err(format!("expected one of {}, got {v:?}", allowed.join(", ")))
     }
 }
 
@@ -129,7 +131,17 @@ fn set(s: &mut Settings, key: &str, v: &str) -> Result<(), String> {
             }
         }
         "scanpath" => return Err(format!("expected an absolute path, got {v:?}")),
+        "exclude" if v.starts_with('/') && !v.chars().any(char::is_control) => {
+            let v = v.trim_end_matches('/');
+            let v = if v.is_empty() { "/" } else { v };
+            if !s.exclude.iter().any(|p| p == v) {
+                s.exclude.push(v.to_string());
+            }
+        }
+        "exclude" => return Err(format!("expected an absolute path without control characters, got {v:?}")),
         "inject_ampr" => s.inject_ampr = flag(v)?,
+        "ampr_installed" => s.ampr_installed = flag(v)?,
+        "install_delete_source" => s.install_delete_source = flag(v)?,
         "add_emulators" => s.add_emulators = flag(v)?,
         "playgo_off" if crate::scan::valid_tid(v) => {
             if !s.playgo_off.iter().any(|t| t == v) {
@@ -137,6 +149,12 @@ fn set(s: &mut Settings, key: &str, v: &str) -> Result<(), String> {
             }
         }
         "playgo_off" => return Err(format!("expected a title id like PPSA01556, got {v:?}")),
+        "overlay_off" if crate::scan::valid_tid(v) => {
+            if !s.overlay_off.iter().any(|t| t == v) {
+                s.overlay_off.push(v.to_string());
+            }
+        }
+        "overlay_off" => return Err(format!("expected a title id like PPSA01556, got {v:?}")),
         "ampr_auto_update" => s.ampr_auto_update = flag(v)?,
         // Removed setting (the game's fakelib is always used in full): ignored, dropped on the next save.
         "game_fakelib" => {}
@@ -158,18 +176,11 @@ fn set(s: &mut Settings, key: &str, v: &str) -> Result<(), String> {
         "notify" => s.notify = flag(v)?,
         "log" => s.log = flag(v)?,
         "debug" => s.debug = flag(v)?,
-        "extract_media" => s.extract_media = flag(v)?,
-        "pkg_profile" => s.pkg_profile = flag(v)?,
-        "run_installed" => s.run_installed = flag(v)?,
-        "ampr_debug_titles" if valid_tid(v) => {
-            let v = v.to_ascii_uppercase();
-            if !s.ampr_debug_titles.contains(&v) {
-                s.ampr_debug_titles.push(v);
-            }
-        }
-        "ampr_debug_titles" => return Err(format!("expected a title id like PPSA01234, got {v:?}")),
-        "ampr_update_repo" if valid_repo(v) => s.ampr_update_repo = v.to_string(),
-        "ampr_update_repo" => return Err(format!("expected owner/repo, got {v:?}")),
+        "ui_theme" => s.ui_theme = one_of(v, UI_THEMES)?,
+        "ui_scheme" => s.ui_scheme = one_of(v, UI_SCHEMES)?,
+        "ui_sidebar_collapsed" => s.ui_sidebar_collapsed = flag(v)?,
+        "ui_lang" if v.is_empty() => s.ui_lang.clear(),
+        "ui_lang" => s.ui_lang = one_of(v, UI_LANGS)?,
         _ => return Err("unknown key".into()),
     }
     Ok(())
@@ -293,10 +304,12 @@ fn parse(text: &str) -> Settings {
         let r = toml_value(&v).and_then(|vals| {
             if k == "scanpath" {
                 s.scan_paths.clear(); // the array replaces the defaults (and an earlier scanpath line)
-            } else if k == "ampr_debug_titles" {
-                s.ampr_debug_titles.clear();
             } else if k == "playgo_off" {
                 s.playgo_off.clear(); // a later playgo_off line replaces an earlier one
+            } else if k == "overlay_off" {
+                s.overlay_off.clear();
+            } else if k == "exclude" {
+                s.exclude.clear();
             } else if vals.len() != 1 {
                 return Err("expected one value, not an array".into());
             } else {
@@ -329,11 +342,21 @@ fn render(s: &Settings) -> String {
                 let items: Vec<String> = s.scan_paths.iter().map(|p| toml_quote(p)).collect();
                 out += &format!("scanpath = [{}]\n", items.join(", "));
             }
+            "exclude" => {
+                let items: Vec<String> = s.exclude.iter().map(|p| toml_quote(p)).collect();
+                out += &format!("exclude = [{}]\n", items.join(", "));
+            }
             "inject_ampr" => out += &format!("{k} = {}\n", s.inject_ampr),
+            "ampr_installed" => out += &format!("{k} = {}\n", s.ampr_installed),
+            "install_delete_source" => out += &format!("{k} = {}\n", s.install_delete_source),
             "add_emulators" => out += &format!("{k} = {}\n", s.add_emulators),
             "playgo_off" => {
                 let items: Vec<String> = s.playgo_off.iter().map(|t| toml_quote(t)).collect();
                 out += &format!("playgo_off = [{}]\n", items.join(", "));
+            }
+            "overlay_off" => {
+                let items: Vec<String> = s.overlay_off.iter().map(|t| toml_quote(t)).collect();
+                out += &format!("overlay_off = [{}]\n", items.join(", "));
             }
             "ampr_auto_update" => out += &format!("{k} = {}\n", s.ampr_auto_update),
             "backports" => out += &format!("{k} = {}\n", s.backports),
@@ -344,14 +367,10 @@ fn render(s: &Settings) -> String {
             "auto_remove_delay_seconds" => out += &format!("{k} = {}\n", s.auto_remove_delay_secs),
             "notify" => out += &format!("{k} = {}\n", s.notify),
             "log" => out += &format!("{k} = {}\n", s.log),
-            "extract_media" => out += &format!("{k} = {}\n", s.extract_media),
-            "pkg_profile" => out += &format!("{k} = {}\n", s.pkg_profile),
-            "run_installed" => out += &format!("{k} = {}\n", s.run_installed),
-            "ampr_update_repo" => out += &format!("{k} = {}\n", toml_quote(&s.ampr_update_repo)),
-            "ampr_debug_titles" => {
-                let items: Vec<String> = s.ampr_debug_titles.iter().map(|t| toml_quote(t)).collect();
-                out += &format!("{k} = [{}]\n", items.join(", "));
-            }
+            "ui_theme" => out += &format!("{k} = {}\n", toml_quote(&s.ui_theme)),
+            "ui_scheme" => out += &format!("{k} = {}\n", toml_quote(&s.ui_scheme)),
+            "ui_sidebar_collapsed" => out += &format!("{k} = {}\n", s.ui_sidebar_collapsed),
+            "ui_lang" => out += &format!("{k} = {}\n", toml_quote(&s.ui_lang)),
             _ => out += &format!("{k} = {}\n", s.debug),
         }
     }
@@ -360,20 +379,36 @@ fn render(s: &Settings) -> String {
 
 /// Reads the config; creates it with the defaults when missing.
 pub fn load() -> Settings {
-    match std::fs::read_to_string(CONFIG_PATH) {
-        Ok(t) => parse(&t),
+    try_load().unwrap_or_else(|e| {
+        log!("config {CONFIG_PATH}: cannot read: {e}; using the defaults");
+        Settings::default()
+    })
+}
+
+/// As `load`, but a read error is returned: a save built on the defaults would overwrite the file.
+/// Invalid UTF-8 is read lossily (an editor's Latin-1 must not reset every setting).
+pub fn try_load() -> std::io::Result<Settings> {
+    match std::fs::read(CONFIG_PATH) {
+        Ok(b) => Ok(parse(&String::from_utf8_lossy(&b))),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             let s = Settings::default();
             if let Err(e) = save(&s) {
                 log!("config {CONFIG_PATH}: cannot create: {e}");
             }
-            s
+            Ok(s)
         }
-        Err(e) => {
-            log!("config {CONFIG_PATH}: cannot read: {e}; using the defaults");
-            Settings::default()
-        }
+        Err(e) => Err(e),
     }
+}
+
+/// Whether `a` and `b` differ only in the web UI's own keys (no rescan needed).
+pub fn ui_only_change(a: &Settings, b: &Settings) -> bool {
+    let mut b = b.clone();
+    b.ui_theme.clone_from(&a.ui_theme);
+    b.ui_scheme.clone_from(&a.ui_scheme);
+    b.ui_sidebar_collapsed = a.ui_sidebar_collapsed;
+    b.ui_lang.clone_from(&a.ui_lang);
+    *a == b
 }
 
 /// Writes the config atomically (tmp + rename).
@@ -390,9 +425,13 @@ pub fn save(s: &Settings) -> std::io::Result<()> {
 pub fn to_json(s: &Settings) -> Value {
     json!({
         "scanpath": s.scan_paths,
+        "exclude": s.exclude,
         "inject_ampr": s.inject_ampr,
+        "ampr_installed": s.ampr_installed,
+        "install_delete_source": s.install_delete_source,
         "add_emulators": s.add_emulators,
         "playgo_off": s.playgo_off,
+        "overlay_off": s.overlay_off,
         "ampr_auto_update": s.ampr_auto_update,
         "backports": s.backports,
         "scan_interval_seconds": s.scan_interval_secs,
@@ -403,10 +442,10 @@ pub fn to_json(s: &Settings) -> Value {
         "notify": s.notify,
         "log": s.log,
         "debug": s.debug,
-        "extract_media": s.extract_media,
-        "pkg_profile": s.pkg_profile,
-        "ampr_update_repo": s.ampr_update_repo,
-        "ampr_debug_titles": s.ampr_debug_titles,
+        "ui_theme": s.ui_theme,
+        "ui_scheme": s.ui_scheme,
+        "ui_sidebar_collapsed": s.ui_sidebar_collapsed,
+        "ui_lang": s.ui_lang,
     })
 }
 
@@ -416,8 +455,8 @@ pub fn from_json(v: &Value) -> Result<Settings, String> {
     let mut s = Settings::default();
     for (k, val) in obj {
         let vals: Vec<&Value> = match (k.as_str(), val) {
-            ("scanpath" | "ampr_debug_titles" | "playgo_off", Value::Array(a)) => a.iter().collect(),
-            ("scanpath" | "ampr_debug_titles" | "playgo_off", _) => return Err(format!("{k}: expected an array of strings")),
+            ("scanpath" | "exclude" | "playgo_off" | "overlay_off", Value::Array(a)) => a.iter().collect(),
+            ("scanpath" | "exclude" | "playgo_off" | "overlay_off", _) => return Err(format!("{k}: expected an array of strings")),
             _ => vec![val],
         };
         for x in vals {

@@ -42,6 +42,11 @@ the upstream README and `dlc_emu.example.ini`.
   `/app0`: `/data/krakenmount/caches/<TID>/dlc_emu.ini`. You can edit that copy, but a Rebuild writes
   it again from the pkg, because the build extracted it. To keep a change, put `dlc_emu.ini` at the
   backport root instead (backport files are copied over pkg files) and Rebuild.
+- Installed game (installed on the console): its `/app0` is the console's install
+  (`/system_ex/app/<TID>`) and cannot be edited. Put `dlc_emu.ini` at the game's backport root
+  instead: Kraken Mount adds the emulator and, at each launch, redirects the backport's files into
+  the game's `/app0`, so dlc_emu reads that copy. An edit applies at the next launch. Without one,
+  dlc_emu reads the `dlc_emu.ini` the installed game ships.
 
 ## Check it worked
 
@@ -64,5 +69,6 @@ web UI. This also turns off the bundled PlayGo emulator (pgo_stub). The change o
 
 - 0.3 is the latest dlc_emu release. Two later upstream fixes are not released yet: a stack
   overrun in every RPC, and an RPC hang on firmware 5.02.
-- A game whose dump ships its own dlc_emu files keeps them; Kraken Mount does not update them.
+- A game whose dump ships its own dlc_emu files keeps them, unless they are a known older release (0.1a
+  or 0.2), which is upgraded.
 - dlc_emu does not merge DLC that is really installed: the game sees only the list in the ini.

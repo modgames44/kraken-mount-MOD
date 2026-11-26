@@ -10,12 +10,7 @@ if [[ "${1:-}" != --inside ]]; then
 fi
 
 # The bundled ampr-emu-ng must be the released file (SHA256SUMS copied from its GitHub release).
-# A local ampr-emu-ng build: ./ps5/vendor-ampr.sh <ampr-emu-ng dir> copies it and rewrites SHA256SUMS.
-if ! (cd vendor/ampr-emu-ng && sha256sum -c --ignore-missing --strict SHA256SUMS); then
-  echo "build: vendor/ampr-emu-ng does not match its SHA256SUMS." >&2
-  echo "build: after building ampr-emu-ng, run: ./ps5/vendor-ampr.sh <path to ampr-emu-ng-main>" >&2
-  exit 1
-fi
+(cd vendor/ampr-emu-ng && sha256sum -c --ignore-missing --strict SHA256SUMS)
 # The bundled dlc_emu and pgo_stub (src/cache.rs EMUS) too.
 (cd vendor/dlc_emu && sha256sum -c --strict SHA256SUMS)
 (cd vendor/pgo_stub && sha256sum -c --strict SHA256SUMS)
@@ -23,7 +18,7 @@ fi
 out=target/ps5
 cc="$PS5_PAYLOAD_SDK/bin/prospero-clang"
 mkdir -p "$out/shim"
-for src in ps5/shim/freebsd11.c ps5/shim/syscalls.S ps5/entry.c ps5/compat.c ps5/usb.c; do
+for src in ps5/shim/freebsd11.c ps5/shim/syscalls.S ps5/entry.c ps5/compat.c ps5/usb.c ps5/installer.c; do
   name=$(basename "${src%.*}")
   "$cc" -O2 -Wall -Wextra -Werror -c "$src" -o "$out/shim/$name.o"
 done

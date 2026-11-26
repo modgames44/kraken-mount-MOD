@@ -17,6 +17,19 @@ pub enum Packing {
 pub enum Kind {
     Pkg,
     Folder(Packing),
+    /// A game installed on the console (installed.rs): /user/app/<TID> or /mnt/extN/user/app/<TID>.
+    Installed,
+}
+
+/// Duplicate rank, lower wins (claim).
+pub fn rank(kind: Kind) -> u8 {
+    match kind {
+        Kind::Installed => 0,
+        Kind::Pkg => 1,
+        Kind::Folder(Packing::Zstd) => 2,
+        Kind::Folder(Packing::Lz4) => 3,
+        Kind::Folder(Packing::Plain) => 4,
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -40,6 +53,8 @@ pub struct ScanResult {
     /// Sources still being copied (stability_wait_seconds): path and title id when known.
     /// Skipped this pass, but not gone: the caller keeps their entry, registration and cache.
     pub unstable: Vec<(PathBuf, Option<String>)>,
+    /// Patch and DLC .pkg files in the scan roots (same candidates, exclusions and stability wait).
+    pub packages: Vec<Package>,
 }
 
 /// Seconds since the youngest max(mtime, ctime) of `paths` when that is under `wait` (SMP
@@ -98,6 +113,217 @@ fn pkg_param(path: &Path, size: u64, mtime: SystemTime) -> PkgParam {
     result
 }
 
+/// Bytes of a CNT header read to classify a package (SMP sm_pkg.c PKG_HEADER_SIZE).
+const CNT_LEN: usize = 0xA0;
+/// Content flags of a patch (SMP sm_pkg.c PKG_PATCH_FLAG_MASK).
+const PKG_PATCH_FLAG_MASK: u32 = 0x4010_0000;
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PkgKind {
+    Base,
+    Patch,
+    Dlc,
+}
+
+/// A patch or DLC .pkg in a scan root: listed on the Install tab, never a game source.
+#[derive(Clone, Debug)]
+pub struct Package {
+    pub path: PathBuf,
+    pub kind: PkgKind,
+    pub content_id: String,
+    pub title_id: String,
+    pub title_name: String,
+    pub version: String,
+    pub size: u64,
+    pub drive: String,
+}
+
+fn be32(b: &[u8], at: usize) -> Option<u32> {
+    Some(u32::from_be_bytes(b.get(at..at.checked_add(4)?)?.try_into().ok()?))
+}
+
+fn le64(b: &[u8], at: usize) -> Option<u64> {
+    Some(u64::from_le_bytes(b.get(at..at.checked_add(8)?)?.try_into().ok()?))
+}
+
+/// Offset of the CNT header from a package's first bytes (SMP parse_package): `\x7FFIH` version 3
+/// -> LE u64 at 0x58; `\x7FLIH` version 1 -> LE u64 at 0x30 (a delta patch); `\x7FCNT` -> 0.
+/// None for any other magic or version, or an offset inside the outer header.
+pub fn cnt_offset(outer: &[u8]) -> Option<(u64, bool)> {
+    let version = || outer.get(6..8).map(|v| u16::from_le_bytes([v[0], v[1]]));
+    let wrapped = |at| le64(outer, at).filter(|&base| base >= CNT_LEN as u64);
+    match outer.get(..4)? {
+        b"\x7FFIH" if version() == Some(3) => Some((wrapped(0x58)?, false)),
+        b"\x7FLIH" if version() == Some(1) => Some((wrapped(0x30)?, true)),
+        b"\x7FCNT" => Some((0, false)),
+        _ => None,
+    }
+}
+
+/// SMP sm_pkg_is_media_remaster: content type 0x26 with both remaster flags.
+fn is_media_remaster(content_type: u32, flags: u32) -> bool {
+    content_type == 0x26 && flags & 0x4040_0000 == 0x4040_0000
+}
+
+/// The title id in a content id (`UP0000-PPSA01234_00-...`: chars 7..16).
+fn title_of(content_id: &str) -> Option<String> {
+    content_id.get(7..16).filter(|t| valid_tid(t)).map(str::to_owned)
+}
+
+/// Package kind and content id from a CNT header (SMP sm_pkg.c parse_package): content type 0x1B,
+/// 0x1C, 0x21 -> Dlc; a delta (LIH, container type low byte 0x1E or high byte 0x41), category
+/// gp/gpd/ps5dp, or the patch flags outside a media remaster -> Patch; else Base. `category` is
+/// the pkg's param.sfo CATEGORY, "" when unknown. None without a valid content id holding a game
+/// title id. A base CATEGORY (gd, gde, gdc, gdp) that disagrees with a Patch from the flags
+/// gives Base: SMP marks that kind not confident and skips the package, here it goes the FPKG
+/// path as on main. ponytail: the rest of SMP's confidence check (known content types, other
+/// disagreeing categories) is not ported; an unusual base package is still Base.
+pub fn classify(cnt: &[u8], delta: bool, category: &str) -> Option<(PkgKind, String)> {
+    if cnt.len() < CNT_LEN || &cnt[..4] != b"\x7FCNT" {
+        return None;
+    }
+    let id = &cnt[0x40..0x40 + 36];
+    let content_id = std::str::from_utf8(&id[..id.iter().position(|&b| b == 0).unwrap_or(36)]).ok()?;
+    if !content_id.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_') {
+        return None;
+    }
+    title_of(content_id)?;
+    let (content_type, flags, container) = (be32(cnt, 0x74)?, be32(cnt, 0x78)?, be32(cnt, 4)?);
+    let delta = delta || container & 0xFF == 0x1E || container & 0xFF00_0000 == 0x4100_0000;
+    let patch_category = ["gp", "gpd", "ps5dp"].iter().any(|c| category.eq_ignore_ascii_case(c));
+    let kind = if matches!(content_type, 0x1B | 0x1C | 0x21) {
+        PkgKind::Dlc
+    } else if delta || patch_category || (!is_media_remaster(content_type, flags) && flags & PKG_PATCH_FLAG_MASK != 0
+        && !["gd", "gde", "gdc", "gdp"].iter().any(|c| category.eq_ignore_ascii_case(c))) {
+        PkgKind::Patch
+    } else {
+        PkgKind::Base
+    };
+    Some((kind, content_id.to_owned()))
+}
+
+/// A string value (format 0x0004 or 0x0204) of a param.sfo (SMP parse_sfo); None when absent.
+fn sfo_string(data: &[u8], key: &str) -> Option<String> {
+    let le32 = |at: usize| data.get(at..at + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize);
+    if data.get(..4)? != b"\0PSF" {
+        return None;
+    }
+    let (keys, values, count) = (le32(8)?, le32(12)?, le32(16)?);
+    let cstr = |b: &[u8]| b[..b.iter().position(|&c| c == 0).unwrap_or(b.len())].to_vec();
+    for e in (0..count.min(data.len().saturating_sub(20) / 16)).map(|i| 20 + i * 16) {
+        let key_rel = u16::from_le_bytes([data[e], data[e + 1]]) as usize;
+        let format = u16::from_le_bytes([data[e + 2], data[e + 3]]);
+        let (Some(length), Some(value_rel)) = (le32(e + 4), le32(e + 12)) else { continue };
+        let Some(name) = data.get(keys.saturating_add(key_rel)..) else { continue };
+        if cstr(name) != key.as_bytes() || !matches!(format, 0x0004 | 0x0204) {
+            continue;
+        }
+        let value = data.get(values.saturating_add(value_rel)..).and_then(|v| v.get(..length));
+        return value.map(|v| String::from_utf8_lossy(&cstr(v)).into_owned());
+    }
+    None
+}
+
+/// (kind, content id, title id, name, version) of a classified package.
+type PkgClass = (PkgKind, String, String, String, String);
+type ClassMemo = HashMap<PathBuf, (u64, SystemTime, Option<PkgClass>)>;
+static CLASS_MEMO: OnceLock<Mutex<ClassMemo>> = OnceLock::new();
+
+/// `read_class`, memoized per (size, mtime) as `pkg_param`; an I/O error is not memoized and
+/// gives None this pass (the FPKG path then reports it).
+fn pkg_class(path: &Path, size: u64, mtime: SystemTime) -> Option<PkgClass> {
+    let memo = CLASS_MEMO.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut memo = memo.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((old_size, old_mtime, class)) = memo.get(path) {
+        if *old_size == size && *old_mtime == mtime {
+            return class.clone();
+        }
+    }
+    match read_class(path) {
+        Ok(class) => {
+            memo.insert(path.to_path_buf(), (size, mtime, class.clone()));
+            class
+        }
+        Err(_) => {
+            memo.remove(path);
+            None
+        }
+    }
+}
+
+/// Whether the memoized class of `path` (any size and mtime) is a patch or DLC.
+fn memo_is_package(path: &Path) -> bool {
+    let memo = CLASS_MEMO.get_or_init(|| Mutex::new(HashMap::new()));
+    let memo = memo.lock().unwrap_or_else(|e| e.into_inner());
+    memo.get(path).is_some_and(|(_, _, c)| c.as_ref().is_some_and(|c| c.0 != PkgKind::Base))
+}
+
+/// A package classified from its outer and CNT headers (SMP parse_package); None when it has no
+/// CNT header `classify` accepts. Category, name and version come from the CNT entry table
+/// (`pkg_param_entries`).
+fn read_class(path: &Path) -> io::Result<Option<PkgClass>> {
+    use std::os::unix::fs::FileExt;
+    let f = fs::File::open(path)?;
+    let len = f.metadata()?.len();
+    let mut head = [0u8; CNT_LEN];
+    if len < CNT_LEN as u64 {
+        return Ok(None);
+    }
+    f.read_exact_at(&mut head, 0)?;
+    let Some((base, delta)) = cnt_offset(&head) else { return Ok(None) };
+    if base > len - CNT_LEN as u64 {
+        return Ok(None);
+    }
+    if base != 0 {
+        f.read_exact_at(&mut head, base)?;
+    }
+    if &head[..4] != b"\x7FCNT" {
+        return Ok(None);
+    }
+    let (category, param) = pkg_param_entries(&f, len, base, &head);
+    let Some((kind, content_id)) = classify(&head, delta, &category) else { return Ok(None) };
+    let title_id = title_of(&content_id).unwrap_or_default();
+    // ponytail: an unreadable param shows the title id and no version.
+    let (name, version) = param.unwrap_or_else(|| (title_id.clone(), String::new()));
+    Ok(Some((kind, content_id, title_id, name, version)))
+}
+
+/// (param.sfo CATEGORY or "", (name, version)) from the CNT entry table at `base` (SMP
+/// read_pkg_sfo): param.json (our `parse_param`) first, else param.sfo TITLE and APP_VER.
+/// Unreadable entries give "" and None.
+fn pkg_param_entries(f: &fs::File, len: u64, base: u64, cnt: &[u8]) -> (String, Option<(String, String)>) {
+    use std::os::unix::fs::FileExt;
+    let (Some(count), Some(table)) = (be32(cnt, 0x10), be32(cnt, 0x18)) else { return (String::new(), None) };
+    let room = len - base;
+    if count == 0 || count > 1024 || table as u64 > room || count as u64 > (room - table as u64) / 0x20 {
+        return (String::new(), None);
+    }
+    let mut entries = vec![0u8; count as usize * 0x20];
+    if f.read_exact_at(&mut entries, base + table as u64).is_err() {
+        return (String::new(), None);
+    }
+    let (mut category, mut sfo, mut json) = (String::new(), None, None);
+    for e in entries.chunks_exact(0x20) {
+        let (Some(id), Some(offset), Some(length)) = (be32(e, 0), be32(e, 0x10), be32(e, 0x14)) else { continue };
+        if !matches!(id, 0x1000 | 0x2000) || length == 0 || length > 1 << 20 || offset as u64 > room
+            || length as u64 > room - offset as u64 {
+            continue;
+        }
+        let mut data = vec![0u8; length as usize];
+        if f.read_exact_at(&mut data, base + offset as u64).is_err() {
+            continue;
+        }
+        if id == 0x1000 {
+            category = sfo_string(&data, "CATEGORY").unwrap_or_default();
+            sfo = sfo_string(&data, "TITLE").map(|t| (t, sfo_string(&data, "APP_VER").unwrap_or_default()));
+        } else {
+            let end = data.iter().rposition(|&b| b != 0).map_or(0, |i| i + 1);
+            json = parse_param(&data[..end]).ok().map(|(_, name, version)| (name, version));
+        }
+    }
+    (category, json.or(sfo))
+}
+
 /// SMP order (resolve_backport_path_for_title): the game's own scan root, the other roots,
 /// then /data/homebrew (SMP's installed backports) even when custom scanpath lines replace it.
 fn backport_for(owner: &Path, roots: &[String], tid: &str) -> Option<PathBuf> {
@@ -139,7 +365,8 @@ fn cached_sources() -> HashMap<PathBuf, String> {
 
 /// (title id, name, version) from the cache's sce_sys/param.json when that cache was built from `pkg`
 /// after the pkg's last change and its stamp has the pkg's current size (a same-name replacement
-/// that kept an older mtime differs in size). ponytail: trusts the cache; the .pkg is not opened then.
+/// that kept an older mtime differs in size). ponytail: trusts the cache; the .pkg is opened only
+/// for its memoized class (`pkg_class`), not for its param.
 fn cached_param(cached: &HashMap<PathBuf, String>, pkg: &Path, size: u64, mtime: SystemTime) -> Option<(String, String, String)> {
     let dir = crate::cache::dir(cached.get(pkg)?);
     let done = dir.join(crate::cache::DONE);
@@ -150,7 +377,7 @@ fn cached_param(cached: &HashMap<PathBuf, String>, pkg: &Path, size: u64, mtime:
     if stamp["size"].as_u64() != Some(size) {
         return None;
     }
-    parse_param(&fs::read(dir.join("sce_sys/param.json")).ok()?).ok()
+    parse_param(&read_param(&dir).ok()?).ok()
 }
 
 fn scan_error(result: &mut ScanResult, path: PathBuf, error: impl std::fmt::Display) {
@@ -165,18 +392,17 @@ fn scan_error(result: &mut ScanResult, path: PathBuf, error: impl std::fmt::Disp
     result.errors.push((path, message));
 }
 
-/// Duplicate rule: a folder beats a pkg; within a kind the first source in scan order wins and
-/// the others go to `duplicates`. A source still being copied (`source` None) claims its title id
-/// the same way, so a mid-copy winner keeps the other copy out of the library (an unstable
+/// Duplicate rule: the lowest `rank` wins; on an equal rank the first source in scan order wins
+/// and the others go to `duplicates`. A source still being copied (`source` None) claims its title
+/// id the same way, so a mid-copy winner keeps the other copy out of the library (an unstable
 /// loser claims nothing); it itself goes only to `unstable`. A `nested` source (one folder below
 /// a root, scanned after every root's own entries) never beats a holder: an old copy kept in a
 /// subfolder cannot take over a game that already runs from a root.
-fn claim<T>(seen: &mut HashMap<String, (bool, Option<usize>)>, games: &mut Vec<Option<T>>,
-            duplicates: &mut Vec<T>, tid: &str, pkg: bool, nested: bool, source: Option<T>) {
+fn claim<T>(seen: &mut HashMap<String, (u8, Option<usize>)>, games: &mut Vec<Option<T>>,
+            duplicates: &mut Vec<T>, tid: &str, rank: u8, nested: bool, source: Option<T>) {
     match seen.get(tid) {
         Some(_) if nested => duplicates.extend(source),
-        // The holder wins unless it is a pkg and this is a folder.
-        Some(&(held_pkg, _)) if !held_pkg || pkg => duplicates.extend(source),
+        Some(&(held, _)) if rank >= held => duplicates.extend(source),
         held => {
             if let Some(&(_, Some(i))) = held {
                 duplicates.extend(games[i].take());
@@ -185,8 +411,21 @@ fn claim<T>(seen: &mut HashMap<String, (bool, Option<usize>)>, games: &mut Vec<O
                 games.push(Some(s));
                 games.len() - 1
             });
-            seen.insert(tid.to_string(), (pkg, slot));
+            seen.insert(tid.to_string(), (rank, slot));
         }
+    }
+}
+
+/// Claims before any root entry: the title being installed now is reserved at rank 0 with no
+/// source (its FPKG becomes a duplicate and is not registered again mid-install), then each
+/// installed game (installed::list, which leaves out titles with a marker) at rank 0.
+fn claim_installed<T>(seen: &mut HashMap<String, (u8, Option<usize>)>, games: &mut Vec<Option<T>>,
+                      duplicates: &mut Vec<T>, installing: Option<&str>, installed: Vec<(String, T)>) {
+    if let Some(tid) = installing {
+        seen.insert(tid.to_string(), (0, None));
+    }
+    for (tid, source) in installed {
+        claim(seen, games, duplicates, &tid, 0, false, Some(source));
     }
 }
 
@@ -228,11 +467,15 @@ fn is_backports(path: &Path) -> bool {
 /// (/mnt/usbN, /mnt/extN): its homebrew and etaHEN/games are roots of their own, and walking
 /// every top folder of a drive (Movies/...) each pass costs too much on USB. A game two folders
 /// down, or in another folder at a drive's root, needs its own scanpath line.
-fn candidates(root: &Path, roots: &[String], listed: &mut HashSet<PathBuf>, result: &mut ScanResult) -> (Vec<PathBuf>, Vec<PathBuf>) {
+fn candidates(root: &Path, roots: &[String], exclude: &[String], listed: &mut HashSet<PathBuf>, result: &mut ScanResult) -> (Vec<PathBuf>, Vec<PathBuf>) {
     let (mut top, mut nested) = (Vec::new(), Vec::new());
+    // Excluded paths are never opened: no listing, no scan error for an unreadable one.
+    if excluded(root, exclude) {
+        return (top, nested);
+    }
     let drive_root = root.parent() == Some(Path::new("/mnt"));
     for path in list(root, result).unwrap_or_default() {
-        if is_backports(&path) || !listed.insert(path.clone()) {
+        if is_backports(&path) || excluded(&path, exclude) || !listed.insert(path.clone()) {
             continue;
         }
         let descend = !drive_root && path.is_dir()
@@ -240,7 +483,7 @@ fn candidates(root: &Path, roots: &[String], listed: &mut HashSet<PathBuf>, resu
             && !roots.iter().any(|r| Path::new(r) == path);
         if descend {
             for child in list(&path, result).unwrap_or_default() {
-                if !is_backports(&child) && listed.insert(child.clone()) {
+                if !is_backports(&child) && !excluded(&child, exclude) && listed.insert(child.clone()) {
                     nested.push(child);
                 }
             }
@@ -250,21 +493,45 @@ fn candidates(root: &Path, roots: &[String], listed: &mut HashSet<PathBuf>, resu
     (top, nested)
 }
 
+/// Whether `path` is an `exclude` entry or lies under one (whole components, so /data/homebrew/A
+/// does not cover /data/homebrew/AB; a trailing `/` on an entry does not matter).
+pub fn excluded(path: &Path, exclude: &[String]) -> bool {
+    exclude.iter().any(|e| path.starts_with(e))
+}
+
 /// Finds the sources under `roots`: the .pkg files and game folders (eboot.bin and
 /// sce_sys/param.json) directly in a root, and those one folder below it (see `candidates`).
-pub fn scan(roots: &[String], backports: bool, stability_wait: u64) -> ScanResult {
-    let mut result = ScanResult { games: Vec::new(), duplicates: Vec::new(), errors: Vec::new(), unstable: Vec::new() };
-    // Title id -> (winner is a pkg, its index in `games`; None while the winner is still being copied).
-    let mut seen: HashMap<String, (bool, Option<usize>)> = HashMap::new();
+/// A source in `exclude` (see `excluded`) is skipped before it can claim its title id.
+/// Installed games (installed::list) claim first, at rank 0; `installing` (the title whose base
+/// install runs now) is reserved with no source (`claim_installed`). A patch or DLC .pkg goes to
+/// `packages`, never to `games` or `errors`.
+pub fn scan(roots: &[String], exclude: &[String], backports: bool, stability_wait: u64, installing: Option<&str>) -> ScanResult {
+    let mut result = ScanResult { games: Vec::new(), duplicates: Vec::new(), errors: Vec::new(), unstable: Vec::new(), packages: Vec::new() };
+    // Title id -> (rank of the winner, its index in `games`; None while the winner is still being
+    // copied or the title is being installed).
+    let mut seen: HashMap<String, (u8, Option<usize>)> = HashMap::new();
     // A slot is emptied when a later source beats it.
     let mut games: Vec<Option<Source>> = Vec::new();
+    // ponytail: an installed game's backport is looked up from the first scan root (backport_for
+    // then tries the other roots and /data/homebrew).
+    let owner = Path::new(roots.first().map_or("/data/homebrew", String::as_str));
+    let installed = crate::installed::list().into_iter()
+        .filter(|g| Some(g.title_id.as_str()) != installing)
+        .map(|g| (g.title_id.clone(), Source {
+            drive: crate::storage::drive_of(&g.path),
+            backport: if backports { backport_for(owner, roots, &g.title_id) } else { None },
+            kind: Kind::Installed, size: g.size, path: g.path,
+            title_id: g.title_id, title_name: g.title_name, version: g.version,
+        }))
+        .collect();
+    claim_installed(&mut seen, &mut games, &mut result.duplicates, installing, installed);
     let cached = cached_sources();
     // Every root's own entries first, in root order, then the nested ones: a nested copy never
     // beats a source found directly in a root (claim).
     let (mut listed, mut order, mut later) = (HashSet::new(), Vec::new(), Vec::new());
     for root in roots {
         let root = Path::new(root);
-        let (top, nested) = candidates(root, roots, &mut listed, &mut result);
+        let (top, nested) = candidates(root, roots, exclude, &mut listed, &mut result);
         order.extend(top.into_iter().map(|p| (root, p, false)));
         later.extend(nested.into_iter().map(|p| (root, p, true)));
     }
@@ -282,9 +549,11 @@ pub fn scan(roots: &[String], backports: bool, stability_wait: u64) -> ScanResul
             // Before the pkg is opened: a half-copied header is not parsed. The title id is
             // the one of an earlier cache of this path, if any.
             if let Some(age) = still_written(std::slice::from_ref(&path), stability_wait) {
-                let tid = cached.get(&path).cloned();
+                // A path last classified as a patch or DLC reserves no title id (an older build
+                // may have cached it as its base game).
+                let tid = cached.get(&path).cloned().filter(|_| !memo_is_package(&path));
                 if let Some(t) = &tid {
-                    claim(&mut seen, &mut games, &mut result.duplicates, t, true, nested, None);
+                    claim(&mut seen, &mut games, &mut result.duplicates, t, rank(Kind::Pkg), nested, None);
                 }
                 skip_unstable(&mut result, path, tid, age);
                 continue;
@@ -296,6 +565,17 @@ pub fn scan(roots: &[String], backports: bool, stability_wait: u64) -> ScanResul
                     continue;
                 }
             };
+            // Classified from its headers first (memoized), with or without a cache: a patch .pkg
+            // cached as a game by an older build is a package. ponytail: its old cache and
+            // registration stay; auto-remove fires only when the source is gone.
+            if let Some((kind @ (PkgKind::Patch | PkgKind::Dlc), content_id, title_id, title_name, version)) =
+                pkg_class(&path, metadata.len(), mtime) {
+                result.packages.push(Package {
+                    drive: crate::storage::drive_of(&path), size: metadata.len(),
+                    path, kind, content_id, title_id, title_name, version,
+                });
+                continue;
+            }
             let param = match cached_param(&cached, &path, metadata.len(), mtime) {
                 Some(p) => Ok(p),
                 None => pkg_param(&path, metadata.len(), mtime),
@@ -308,23 +588,16 @@ pub fn scan(roots: &[String], backports: bool, stability_wait: u64) -> ScanResul
             let probe = [path.clone(), path.join("sce_sys"), path.join("sce_sys/param.json"), path.join("eboot.bin")];
             if let Some(age) = still_written(&probe, stability_wait) {
                 // A param.json mid-copy does not parse: the title id of an earlier cache of this path.
-                let tid = fs::read(path.join("sce_sys/param.json")).ok()
+                let tid = read_param(&path).ok()
                     .and_then(|json| parse_param(&json).ok()).map(|(tid, _, _)| tid)
                     .or_else(|| cached.get(&path).cloned());
                 if let Some(t) = &tid {
-                    claim(&mut seen, &mut games, &mut result.duplicates, t, false, nested, None);
+                    claim(&mut seen, &mut games, &mut result.duplicates, t, rank(Kind::Folder(packing(&path))), nested, None);
                 }
                 skip_unstable(&mut result, path, tid, age);
                 continue;
             }
-            let packing = if path.join("ampr_zstd.index").is_file() {
-                Packing::Zstd
-            } else if path.join("ampr_assets.index").is_file() {
-                Packing::Lz4
-            } else {
-                Packing::Plain
-            };
-            (Kind::Folder(packing), 0, fs::read(path.join("sce_sys/param.json"))
+            (Kind::Folder(packing(&path)), 0, read_param(&path)
                 .and_then(|json| parse_param(&json)).map_err(|e| e.to_string()))
         } else {
             continue;
@@ -341,13 +614,12 @@ pub fn scan(roots: &[String], backports: bool, stability_wait: u64) -> ScanResul
             continue;
         }
         let source = Source {
-            // The drive shown is the mounted image's own drive, not the kraken mount dir.
-            drive: crate::storage::drive_of(&crate::image::image_of(&path).unwrap_or_else(|| path.clone())),
+            drive: crate::storage::drive_of(&path),
             backport: if backports { backport_for(root, roots, &title_id) } else { None },
             path, kind, title_id, title_name, version, size,
         };
-        let (tid, pkg) = (source.title_id.clone(), source.kind == Kind::Pkg);
-        claim(&mut seen, &mut games, &mut result.duplicates, &tid, pkg, nested, Some(source));
+        let (tid, rank) = (source.title_id.clone(), rank(source.kind));
+        claim(&mut seen, &mut games, &mut result.duplicates, &tid, rank, nested, Some(source));
     }
     result.games = games.into_iter().flatten().collect();
     result.games.sort_by(|a, b| a.title_name.cmp(&b.title_name));
@@ -363,6 +635,57 @@ pub fn scan(roots: &[String], backports: bool, stability_wait: u64) -> ScanResul
     }
     result
 }
+
+fn packing(dir: &Path) -> Packing {
+    if dir.join("ampr_zstd.index").is_file() {
+        Packing::Zstd
+    } else if dir.join("ampr_assets.index").is_file() {
+        Packing::Lz4
+    } else {
+        Packing::Plain
+    }
+}
+
+/// The source at `path` read as the scan reads it (pkg header memoized), no backport; None when
+/// it is not a readable game (a patch or DLC package included). For excluded paths, which the scan skips.
+pub fn read_source(path: &Path) -> Option<Source> {
+    let m = fs::metadata(path).ok()?;
+    let (kind, size, (title_id, title_name, version)) =
+        if m.is_file() && path.extension().is_some_and(|e| e.eq_ignore_ascii_case("pkg")) {
+            let mtime = m.modified().ok()?;
+            // A patch or DLC package is not a game.
+            if pkg_class(path, m.len(), mtime).is_some_and(|c| c.0 != PkgKind::Base) {
+                return None;
+            }
+            (Kind::Pkg, m.len(), pkg_param(path, m.len(), mtime).ok()?)
+        } else if m.is_dir() && path.join("eboot.bin").is_file() {
+            // ponytail: param.json is read again on every call (a few KiB; the scan does it per pass too).
+            (Kind::Folder(packing(path)), 0, parse_param(&read_param(path).ok()?).ok()?)
+        } else {
+            return None;
+        };
+    Some(Source {
+        path: path.to_path_buf(), kind, title_id, title_name, version, size,
+        drive: crate::storage::drive_of(path), backport: None,
+    })
+}
+
+/// A whole file of at most `max` bytes: a corrupt, huge file must not abort the payload (panic=abort).
+pub fn read_capped(path: &Path, max: u64) -> io::Result<Vec<u8>> {
+    use std::io::Read;
+    let mut b = Vec::new();
+    fs::File::open(path)?.take(max + 1).read_to_end(&mut b)?;
+    if b.len() as u64 > max {
+        return Err(Error::new(ErrorKind::InvalidData, format!("{}: over {max} bytes", path.display())));
+    }
+    Ok(b)
+}
+
+/// A folder's sce_sys/param.json (at most 1 MiB).
+pub fn read_param(dir: &Path) -> io::Result<Vec<u8>> {
+    read_capped(&dir.join("sce_sys/param.json"), 1 << 20)
+}
+
 pub fn parse_param(json: &[u8]) -> io::Result<(String, String, String)> {
     let v: serde_json::Value = serde_json::from_slice(json)
         .map_err(|e| Error::new(ErrorKind::InvalidData, format!("param.json: {e}")))?;

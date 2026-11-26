@@ -1,7 +1,7 @@
 # PlayGo stub (pgo_stub)
 
-Kraken Mount mounts games instead of installing them, so the console has no PlayGo install record for
-them. A game that asks PlayGo about its install state can then decide it is not fully installed and ask
+Kraken Mount mounts folder and pkg games instead of installing them, so the console has no PlayGo
+install record for them (a game installed on the console has its own). A game that asks PlayGo about its install state can then decide it is not fully installed and ask
 you to finish the download. Kraken Mount bundles drakmor's
 [pgo_stub](https://github.com/drakmor/pgo_stub) (release 0.6, GPL-3.0), a replacement
 `libScePlayGo.sprx` that reports every chunk as available and installed.
@@ -37,7 +37,11 @@ all languages, and everything installed. To change that, put `playgo_stub.dat` h
 
 - folder game: in the game folder, next to `eboot.bin`;
 - pkg game: in the root of the pkg, and Kraken Mount extracts it to the cache. You can also put it
-  straight into `/data/krakenmount/caches/<TID>/`, which is the pkg game's `/app0`.
+  straight into `/data/krakenmount/caches/<TID>/`, which is the pkg game's `/app0`;
+- installed game (installed on the console): its `/app0` is the console's install and cannot be
+  edited, so put `playgo_stub.dat` at the game's backport root: at each launch Kraken Mount
+  redirects the backport's files (an `eboot.bin` too) into the game's `/app0`. Without one, only a
+  `playgo_stub.dat` the installed game ships is read.
 
 The file has up to 3 lines:
 
@@ -57,8 +61,9 @@ The upstream README lists every language name and the fallback for each invalid 
 
 ## Use another build
 
-Put your own `libScePlayGo.sprx` into the game's `fakelib/`. Kraken Mount sees that the game ships one
-and leaves it alone.
+Put your own `libScePlayGo.sprx` into the game's `fakelib/` (an installed game: the backport's `fakelib/`,
+since the install cannot be edited). Kraken Mount sees that the game ships one and leaves it alone, unless it is
+a known older pgo_stub release (see above).
 
 ## Turn it off for one game
 

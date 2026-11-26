@@ -78,6 +78,8 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Checkout first: it cleans the workspace the artifact lands in.
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: payload
@@ -86,10 +88,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
+          version=$(tr -d '\r' < Cargo.toml | sed -n 's/^version = "\(.*\)"$/\1/p' | head -n1)
+          [ "$TAG" = "v$version" ] || { echo "tag $TAG is not v$version (Cargo.toml)" >&2; exit 1; }
           sha256sum -c SHA256SUMS
+          # The ps5-payload-manager catalog; SHA256SUMS does not list it.
+          ./ps5/make-payloads-json.sh kraken-mount.elf payloads.json
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --title "$TAG" \
             --draft \
             --generate-notes \
-            kraken-mount.elf SHA256SUMS
+            kraken-mount.elf SHA256SUMS payloads.json

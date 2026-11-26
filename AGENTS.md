@@ -9,7 +9,10 @@ and USB/extended drives, keeps a per-game cache on the internal SSD, registers e
 screen without installing it, and at launch mounts the game's fakelib plus ampr-emu-ng into the game
 sandbox. Web UI on port 8097 (opened from the "Kraken Mount" home-screen tile).
 
-- Sources: debug FPKG `.pkg` files and game folders (plain, zstd or LZ4 AMPR packs). Nothing else.
+- Sources: debug FPKG `.pkg` files and game folders (plain, zstd or LZ4 AMPR packs), plus games installed on the
+  console (`/user/app`, extended storage), which are never mounted. FPKG games and patch/DLC `.pkg` files can be
+  installed through the console installer (game sheet Install for FPKG games, Install tab for patch/DLC). Nothing
+  else.
 - ampr-emu-ng ("ng") is NOT built here: it is its own project. Its released `libSceAmpr.sprx` is
   bundled from `vendor/ampr-emu-ng/`; to update, replace the file, `SHA256SUMS` and `VERSION` from
   the new GitHub release. A file put into `/data/krakenmount/ampr/` by hand overrides it. Do not edit the ng project from here unless the task asks for it.
@@ -26,17 +29,24 @@ sandbox. Web UI on port 8097 (opened from the "Kraken Mount" home-screen tile).
 | `src/main.rs` | start-up, scan loop (pauses while a game runs), self copy |
 | `src/config.rs` | `/data/krakenmount/config.toml` settings |
 | `src/storage.rs` | drives and default scan roots |
-| `src/scan.rs` | game discovery, backports, duplicates |
+| `src/scan.rs` | game discovery, backports, duplicates (rank: installed, FPKG, zstd, LZ4, plain), patch/DLC packages |
+| `src/installed.rs` | games installed on the console, the `installing/<TID>` markers, the retail check |
+| `src/crash.rs` | crash reports (`crashes.json`), the last crash per title |
+| `src/install.rs` | the install queue and job, the loopback `.pkg` Range server, the installer FFI |
 | `src/cache.rs` | per-game cache `/data/krakenmount/caches/<TID>`, freshness, `.built`, purge |
 | `src/ampr_index.rs` | writes `ampr_emu.index` + `ampr_assets.index` for pkg caches |
 | `src/register.rs` | home-screen registration, `/system_ex/app/<TID>` mounts, the tile |
 | `src/launch.rs` | launch watcher: the fakelib overlay, writable `/app0`, `/app0/kraken` |
+| `src/launch/nsfs.rs` | NSFS redirects of an installed game's backport loose files into the sandbox /app0 |
 | `src/web.rs`, `src/ui.html` | HTTP server and the single-file UI |
 | `src/sys.rs` | log, toasts, mount syscalls, kstuff probe |
-| `src/net.rs` | HTTPS GET over the console's sceHttp/sceSsl (ampr-emu-ng auto-update) |
+| `src/net.rs` | HTTPS GET over the console's sceHttp/sceSsl (ampr-emu-ng auto-update, self-update) |
+| `src/update.rs` | self-update: latest Kraken Mount release checked at start, `/api/self_update` sends it to elfldr |
 | `src/i18n.rs` | toast texts in the console language (the UI's 11 languages) |
 | `crates/kraken-mount-pkg` | FPKG reader and its Kraken decoder (`decoder` module) |
 | `ps5/` | Docker build, linker, C shims (`compat.c` holds PS5 libc adapters, `appdb.c` writes app.db through the SQLite amalgamation the Dockerfile fetches) |
+| `ps5/installer.c` | `sceAppInstUtilInstallByPackage` with the creds swap (port of dump-forge `forge_pkg_install`), status, cancel, one AppInstUtil lock |
+| `ps5/make-payloads-json.sh` | the release's `payloads.json` for ps5-payload-manager (run by the build.yml release job) |
 | `DESIGN.md` | the contract: paths, settings, cache rules, flow, module interfaces, web API |
 
 ## Build and check
