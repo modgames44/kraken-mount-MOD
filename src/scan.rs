@@ -32,6 +32,12 @@ pub fn rank(kind: Kind) -> u8 {
     }
 }
 
+/// An internal console install run through ng (ampr_installed): a pkg source at
+/// /user/app/<TID>/app.pkg. The console's registration stays; only /system_ex/app/<TID> is ours.
+pub fn installed_pkg(src: &Source) -> bool {
+    src.kind == Kind::Pkg && src.path.starts_with("/user/app")
+}
+
 #[derive(Clone, Debug)]
 pub struct Source {
     pub path: PathBuf,
@@ -505,7 +511,7 @@ pub fn excluded(path: &Path, exclude: &[String]) -> bool {
 /// Installed games (installed::list) claim first, at rank 0; `installing` (the title whose base
 /// install runs now) is reserved with no source (`claim_installed`). A patch or DLC .pkg goes to
 /// `packages`, never to `games` or `errors`.
-pub fn scan(roots: &[String], exclude: &[String], backports: bool, stability_wait: u64, installing: Option<&str>) -> ScanResult {
+pub fn scan(roots: &[String], exclude: &[String], backports: bool, stability_wait: u64, installing: Option<&str>, ng_installed: &dyn Fn(&str) -> bool) -> ScanResult {
     let mut result = ScanResult { games: Vec::new(), duplicates: Vec::new(), errors: Vec::new(), unstable: Vec::new(), packages: Vec::new() };
     // Title id -> (rank of the winner, its index in `games`; None while the winner is still being
     // copied or the title is being installed).
@@ -517,12 +523,21 @@ pub fn scan(roots: &[String], exclude: &[String], backports: bool, stability_wai
     let owner = Path::new(roots.first().map_or("/data/homebrew", String::as_str));
     let installed = crate::installed::list().into_iter()
         .filter(|g| Some(g.title_id.as_str()) != installing)
-        .map(|g| (g.title_id.clone(), Source {
-            drive: crate::storage::drive_of(&g.path),
-            backport: if backports { backport_for(owner, roots, &g.title_id) } else { None },
-            kind: Kind::Installed, size: g.size, path: g.path,
-            title_id: g.title_id, title_name: g.title_name, version: g.version,
-        }))
+        .map(|g| {
+            // An internal debug FPKG install with ampr_installed (per title): its app.pkg is a pkg
+            // source (ng pkg mode), see installed_pkg. Retail and extended-storage installs stay native.
+            // A header that cannot be read this pass keeps the last build's kind (no rebuild flip-flop).
+            let as_pkg = g.path.starts_with("/user/app") && ng_installed(&g.title_id)
+                && crate::installed::debug_of(&g.path.join("app.pkg"))
+                    .unwrap_or_else(|| crate::cache::stamp_kind(&g.title_id).as_deref() == Some("pkg"));
+            (g.title_id.clone(), Source {
+                drive: crate::storage::drive_of(&g.path),
+                backport: if backports { backport_for(owner, roots, &g.title_id) } else { None },
+                kind: if as_pkg { Kind::Pkg } else { Kind::Installed }, size: g.size,
+                path: if as_pkg { g.path.join("app.pkg") } else { g.path },
+                title_id: g.title_id, title_name: g.title_name, version: g.version,
+            })
+        })
         .collect();
     claim_installed(&mut seen, &mut games, &mut result.duplicates, installing, installed);
     let cached = cached_sources();

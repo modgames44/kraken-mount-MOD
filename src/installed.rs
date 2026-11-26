@@ -147,6 +147,14 @@ pub fn list_in(root: &Path) -> Vec<Game> {
     out
 }
 
+/// Whether the first 8 bytes of `pkg` say a debug FPKG (`\x7FFIH`, signed byte 0); None when they cannot
+/// be read (scan.rs then keeps the kind the cache was last built as).
+pub fn debug_of(pkg: &Path) -> Option<bool> {
+    let mut head = [0u8; 8];
+    fs::File::open(pkg).and_then(|mut f| f.read_exact(&mut head)).ok()?;
+    Some(&head[..4] == b"\x7FFIH" && head[5] == 0)
+}
+
 /// `retail_header` of the first 8 bytes of `pkg`; false when it cannot be read.
 pub fn retail_of(pkg: &Path) -> bool {
     let mut head = [0u8; 8];

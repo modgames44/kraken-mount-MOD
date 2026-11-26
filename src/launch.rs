@@ -207,6 +207,13 @@ fn proc_find(mut f: impl FnMut(libc::pid_t, &[u8]) -> bool) -> Option<libc::pid_
     None
 }
 
+/// The running game of `tid`: (pid, app id from sceKernelGetAppInfo), for sys::close_app.
+pub fn game_app(tid: &str) -> Option<(libc::pid_t, u32)> {
+    let pid = find_title_pid(tid)?;
+    let mut info: AppInfo = unsafe { std::mem::zeroed() };
+    (unsafe { sceKernelGetAppInfo(pid, &mut info) } == 0).then_some((pid, info.app_id))
+}
+
 /// SMP resolve_game_title_id: sceKernelGetAppInfo(pid).title_id, None while it is empty.
 fn title_of(pid: libc::pid_t) -> Option<String> {
     let mut info: AppInfo = unsafe { std::mem::zeroed() };

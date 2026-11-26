@@ -46,11 +46,12 @@ fn toast(s: &Settings, msg: &str) {
 }
 
 /// What a failed game's retry waits for: another stamp, or any build input (pkg/folder files,
-/// backport, ampr dir) appearing, vanishing or changing mtime, or the game's PlayGo or overlay switch.
+/// backport, ampr dir) appearing, vanishing or changing mtime, or the game's PlayGo, overlay or ng switch.
 fn inputs_key(src: &Source, s: &Settings) -> String {
     let mut k = cache::stamp(src, s).to_string();
     k += &format!("|playgo_off={}", s.playgo_off.contains(&src.title_id));
     k += &format!("|overlay_off={}", s.overlay_off.contains(&src.title_id));
+    k += &format!("|ng={}", s.ng_installed(&src.title_id));
     for p in cache::inputs(src, s) {
         let mtime = std::fs::metadata(&p).and_then(|m| m.modified()).ok();
         k += &format!("|{}={mtime:?}", p.display());
@@ -101,6 +102,10 @@ fn build_and_register(state: &State, s: &Settings, src: &Source, fresh: &Fresh, 
     let app0 = cache::app0(src);
     if src.kind == Kind::Installed {
         if stale {
+            // Run through ng until now: our nullfs over the cache goes before the build empties that cache.
+            if cache::stamp_kind(tid).as_deref() == Some("pkg") {
+                register::drop_cache_layer(tid)?;
+            }
             remember_old_source(tid);
             log_rebuild(tid, fresh);
             state.update(&src.path, |g| g.status = "building");
@@ -111,6 +116,20 @@ fn build_and_register(state: &State, s: &Settings, src: &Source, fresh: &Fresh, 
         }
         cache::fix_access(src);
         drop_old_mount(s, tid);
+        return Ok(Reg::Kept);
+    }
+    if scan::installed_pkg(src) {
+        // The console registered it: build when stale, then only our /system_ex/app/<TID> mount.
+        if stale {
+            log_rebuild(tid, fresh);
+            state.update(&src.path, |g| g.status = "building");
+            check_space(state, s);
+            let r = cache::build(src, s);
+            check_space(state, s);
+            r?;
+        }
+        cache::fix_access(src);
+        register::mount_over_install(tid, &app0)?;
         return Ok(Reg::Kept);
     }
     if !stale && register::is_registered(tid) {
@@ -155,7 +174,10 @@ fn relink_moved(s: &Settings, src: &Source, from: &std::path::Path) -> std::io::
     cache::relink(src, s, from)?;
     // The moved copy may have other modes, and a registered title skips build_and_register.
     cache::fix_access(src);
-    toast(s, &i18n::moved(i18n::lang(), &src.title_name, &src.path.to_string_lossy()));
+    // An install run through ng (a cache from its scan-root FPKG): not a move the user made.
+    if !scan::installed_pkg(src) {
+        toast(s, &i18n::moved(i18n::lang(), &src.title_name, &src.path.to_string_lossy()));
+    }
     Ok(())
 }
 
@@ -191,7 +213,12 @@ fn process(
     } else if !forced && matches!(fresh, Fresh::Fresh) && registered.contains(tid) {
         // Each scan: redo /system_ex/app/<TID> when it is gone or stale (USB replug, rest
         // mode); a no-op when app0 is mounted there. Status stays "ready" (no UI flicker).
-        match register::mount(tid, &cache::app0(src), backport_of(src)) {
+        let r = if scan::installed_pkg(src) {
+            register::mount_over_install(tid, &cache::app0(src))
+        } else {
+            register::mount(tid, &cache::app0(src), backport_of(src))
+        };
+        match r {
             Ok(()) => {
                 state.update(&src.path, |g| g.status = "ready");
                 return;
@@ -854,7 +881,18 @@ fn auto_remove(state: &State, s: &Settings, r: &scan::ScanResult, timers: &mut M
             return;
         }
         let source = &missing[&tid];
-        // Never uninstall a real installed game that shares the title id; rechecked every pass.
+        // Never uninstall a real installed game that shares the title id; rechecked every pass. A console
+        // install run through ng (scan::installed_pkg) has a pkg stamp whose source is under /user/app.
+        let console = std::path::Path::new(source.as_str()).starts_with("/user/app");
+        if console {
+            // Uninstalled from the console's menu: the console's entry is gone; only our layer can be left.
+            if let Err(e) = register::drop_cache_layer(&tid) {
+                log!("{tid}: console install {source} gone: unmount our layer: {e}; retried next pass");
+            } else if timers.skipped.insert(tid.clone()) {
+                log!("{tid}: console install {source} gone; nothing of ours left mounted");
+            }
+            continue;
+        }
         if let Err(p) = register::is_ours(&tid) {
             if timers.skipped.insert(tid.clone()) {
                 log!("{tid}: auto-remove skipped: an installed copy exists ({})", p.display());
@@ -918,6 +956,8 @@ fn main() {
     }
     let web_state = state.clone();
     std::thread::spawn(move || web::serve(web_state, listener));
+    let smp_state = state.clone();
+    std::thread::spawn(move || web::serve_smp(smp_state));
     // The web UI is up; nothing mounts until ShadowMount+ is gone.
     wait_ready(&state);
     let (titles, running) = (state.titles.clone(), state.running.clone());
@@ -970,7 +1010,7 @@ fn main() {
         sys::LOG_FILE.store(s.log, Ordering::Relaxed);
         state.busy.store(true, Ordering::SeqCst);
         let roots = if s.scan_paths.is_empty() { storage::default_scan_roots() } else { s.scan_paths.clone() };
-        let r = scan::scan(&roots, &s.exclude, s.backports, s.stability_wait_secs, install::busy_tid().as_deref());
+        let r = scan::scan(&roots, &s.exclude, s.backports, s.stability_wait_secs, install::busy_tid().as_deref(), &|t| s.ng_installed(t));
         let scan_ms = pass.elapsed().as_millis();
         if state.paused() {
             continue;

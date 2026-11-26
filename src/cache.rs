@@ -316,10 +316,18 @@ pub fn purge(keep: &[String]) -> Result<()> {
             // Never for an installed title: that stack is the system's (an installed title can miss
             // from `keep`, e.g. one installed::list skips). ponytail: a layer of ours left over it
             // is dropped by main's drop_old_mount once the title is listed again.
+            // An install run through ng has a pkg stamp whose source is its /user/app app.pkg (installed
+            // even while that file is briefly gone during a console update).
             let installed = crate::installed::copy_in(Path::new("/"), &name).is_some()
-                || stamp_kind(&name).as_deref() == Some("installed");
+                || stamp_kind(&name).as_deref() == Some("installed")
+                || stamp_source(&name).is_some_and(|p| Path::new(&p).starts_with("/user/app"));
             if installed {
-                log!("{name}: purge: installed, /system_ex/app/{name} left mounted; deleting {}", path.display());
+                // An install run through ng has our cache nullfs on top: that layer only, else the cache stays.
+                if let Err(err) = crate::register::drop_cache_layer(&name) {
+                    log!("{name}: purge skipped {}: unmount our layer: {err}", path.display());
+                    continue;
+                }
+                log!("{name}: purge: installed, the system's /system_ex/app/{name} left mounted; deleting {}", path.display());
             } else if let Err(err) = crate::register::unmount_title(&name) {
                 log!("{name}: purge skipped {}: unmount: {err}", path.display());
                 continue;
@@ -649,19 +657,19 @@ fn ampr_state(src: &Source, s: &Settings) -> serde_json::Value {
 
 /// Whether fakelib/ gets the ampr dir's files: always for a pkg (#73: pkg mode exists only in
 /// ampr-emu-ng, the package's own libSceAmpr.sprx cannot read the .pkg named in kraken.image);
-/// a folder with inject_ampr; an installed game with ampr_installed.
+/// a folder with inject_ampr; an installed game with ampr_installed (per title, Settings::ng_installed).
 fn injects_ampr(src: &Source, s: &Settings) -> bool {
     match src.kind {
         Kind::Pkg => true,
         Kind::Folder(_) => s.inject_ampr,
-        Kind::Installed => s.ampr_installed,
+        Kind::Installed => s.ng_installed(&src.title_id),
     }
 }
 
 /// An installed game without ampr_installed: no libSceAmpr.sprx in its fakelib at all, the backport's
 /// included (SMP removes it from an installed PPR package's backport fakelib), so the system's runs.
 fn drops_game_ng(src: &Source, s: &Settings) -> bool {
-    src.kind == Kind::Installed && !s.ampr_installed
+    src.kind == Kind::Installed && !s.ng_installed(&src.title_id)
 }
 
 /// libkernel.sprx from the ampr dir would replace the system one for every game: never copied.

@@ -6,8 +6,8 @@
 <title>Kraken Mount v__VERSION__</title>
 <style>
 /* Hallmark · macrostructure: Workbench (side rail + working pane) · genre: atmospheric · tone: utilitarian
- * nav: N3 side-rail · themes: abyss/ember/moss x dark/light · tokens first, colors never raw below them */
-/* Design tokens. Applied as <html data-theme="dark|light" data-scheme="abyss|ember|moss">.
+ * nav: N3 side-rail · themes: abyss/ember/moss/cobalt/dusk/rose/sand/volt/mono x dark/light · tokens first, colors never raw below them */
+/* Design tokens. Applied as <html data-theme="dark|light" data-scheme="abyss|ember|moss|cobalt|dusk|rose|sand|volt|mono">.
  * Colors are hex/rgba because the PS5 WebKit has no oklch(); the oklch source of each accent/focus is in a trailing comment.
  * Neutrals carry the scheme hue at chroma 0.004-0.018. Status hues are fixed: danger 25, warn 70-80, ok 150.
  * --danger / --warn / --ok are text/icon colors usable on --*-bg; --danger-ink is text on a solid --danger fill.
@@ -19,6 +19,18 @@
  *   ember light  ink/bg 16.3  muted/bg 6.3  accent-ink/accent 5.5  focus/bg 5.8  ink/accent-soft 13.9  label-ink/label-bg(over white) 7.8
  *   moss  dark   ink/bg 16.0  muted/bg 6.9  accent-ink/accent 8.6  focus/bg 11.3  ink/accent-soft 11.7  label-ink/label-bg(over white) 7.7
  *   moss  light  ink/bg 16.3  muted/bg 6.2  accent-ink/accent 6.2  focus/bg 5.2  ink/accent-soft 14.2  label-ink/label-bg(over white) 7.7
+ *   cobalt dark  ink/bg 16.3  muted/bg 7.3  accent-ink/accent 8.2  focus/bg 9.8  ink/accent-soft 12.1  label-ink/label-bg(over white) 7.8
+ *   cobalt light ink/bg 16.2  muted/bg 6.2  accent-ink/accent 6.3  focus/bg 5.1  ink/accent-soft 13.8  label-ink/label-bg(over white) 7.8
+ *   dusk   dark  ink/bg 16.1  muted/bg 7.0  accent-ink/accent 8.5  focus/bg 10.5  ink/accent-soft 12.4  label-ink/label-bg(over white) 7.8
+ *   dusk   light ink/bg 16.4  muted/bg 6.5  accent-ink/accent 6.3  focus/bg 5.4  ink/accent-soft 13.8  label-ink/label-bg(over white) 7.8
+ *   rose   dark  ink/bg 16.0  muted/bg 7.0  accent-ink/accent 8.5  focus/bg 9.9  ink/accent-soft 12.3  label-ink/label-bg(over white) 7.8
+ *   rose   light ink/bg 16.6  muted/bg 6.3  accent-ink/accent 5.9  focus/bg 5.2  ink/accent-soft 14.2  label-ink/label-bg(over white) 7.8
+ *   sand   dark  ink/bg 16.1  muted/bg 7.1  accent-ink/accent 11.0  focus/bg 12.9  ink/accent-soft 11.4  label-ink/label-bg(over white) 7.8
+ *   sand   light ink/bg 15.9  muted/bg 6.0  accent-ink/accent 6.1  focus/bg 4.9  ink/accent-soft 14.2  label-ink/label-bg(over white) 7.8
+ *   volt   dark  ink/bg 16.7  muted/bg 7.2  accent-ink/accent 14.3  focus/bg 17.1  ink/accent-soft 10.4  label-ink/label-bg(over white) 8.0
+ *   volt   light ink/bg 16.8  muted/bg 6.2  accent-ink/accent 6.1  focus/bg 4.7  ink/accent-soft 15.1  label-ink/label-bg(over white) 8.0
+ *   mono   dark  ink/bg 16.5  muted/bg 6.9  accent-ink/accent 14.9  focus/bg 19.3  ink/accent-soft 11.5  label-ink/label-bg(over white) 7.9
+ *   mono   light ink/bg 16.9  muted/bg 6.7  accent-ink/accent 16.1  focus/bg 18.9  ink/accent-soft 14.3  label-ink/label-bg(over white) 7.9
  */
 
 :root {
@@ -233,12 +245,349 @@ html[data-theme="light"][data-scheme="moss"] {
 }
 
 /* Settings swatches: each dot shows its own scheme's accent for the current theme. */
+/* Ported from ps5-dump-forge (app/src/styles.css): its --on-accent / --on-danger are --accent-ink /
+ * --danger-ink here; --rail, --label-* and --cover-scrim are derived from the scheme's own bg. */
+html[data-theme="dark"][data-scheme="cobalt"] {
+  --bg: #0a0f1a;
+  --surface: #111827;
+  --surface-2: #1a2232;
+  --rail: #060910;
+  --line: #2c3647;
+  --ink: #e8edf5;
+  --ink-2: #c3cbd8;
+  --muted: #95a0b2;
+  --accent: #6ea8ff;
+  --accent-ink: #050b16;
+  --accent-soft: #0f2a52;
+  --focus: #8dbcff;
+  --danger: #ed756e;
+  --danger-ink: #170c0b;
+  --danger-bg: #3f1917;
+  --warn: #f0ba59;
+  --warn-bg: #362607;
+  --ok: #76cf8a;
+  --ok-bg: #122d19;
+  --label-bg: rgba(4, 6, 10, 0.72);
+  --label-ink: #f1f4f9;
+  --cover-scrim: linear-gradient(to top, rgba(2, 4, 6, 0.85) 0%, rgba(2, 4, 6, 0) 60%);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.45);
+  color-scheme: dark;
+}
+
+html[data-theme="light"][data-scheme="cobalt"] {
+  --bg: #eef3fb;
+  --surface: #fafcff;
+  --surface-2: #e4ebf6;
+  --rail: #e1e7f2;
+  --line: #c9d4e5;
+  --ink: #0e1626;
+  --ink-2: #2e3a4f;
+  --muted: #4f5b70;
+  --accent: #1c56c4;
+  --accent-ink: #f6f9ff;
+  --accent-soft: #d4e2fb;
+  --focus: #1f5fd8;
+  --danger: #ac3031;
+  --danger-ink: #fef9f8;
+  --danger-bg: #ffe4e1;
+  --warn: #8a5600;
+  --warn-bg: #f8eace;
+  --ok: #246e3a;
+  --ok-bg: #dcf2df;
+  --label-bg: rgba(4, 6, 10, 0.72);
+  --label-ink: #f1f4f9;
+  --cover-scrim: linear-gradient(to top, rgba(2, 4, 6, 0.85) 0%, rgba(2, 4, 6, 0) 60%);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.12);
+  color-scheme: light;
+}
+
+html[data-theme="dark"][data-scheme="dusk"] {
+  --bg: #110d18;
+  --surface: #191422;
+  --surface-2: #221c2d;
+  --rail: #0a080e;
+  --line: #372f44;
+  --ink: #eee9f4;
+  --ink-2: #cdc5d8;
+  --muted: #a198ae;
+  --accent: #b79bff;
+  --accent-ink: #0f0a18;
+  --accent-soft: #2d2148;
+  --focus: #c9b4ff;
+  --danger: #ed756e;
+  --danger-ink: #170c0b;
+  --danger-bg: #3f1917;
+  --warn: #f0ba59;
+  --warn-bg: #362607;
+  --ok: #76cf8a;
+  --ok-bg: #122d19;
+  --label-bg: rgba(6, 5, 9, 0.72);
+  --label-ink: #f5f2f8;
+  --cover-scrim: linear-gradient(to top, rgba(4, 3, 6, 0.85) 0%, rgba(4, 3, 6, 0) 60%);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.45);
+  color-scheme: dark;
+}
+
+html[data-theme="light"][data-scheme="dusk"] {
+  --bg: #f4f1f9;
+  --surface: #fcfbfe;
+  --surface-2: #ebe6f3;
+  --rail: #e7e3ef;
+  --line: #d4cce2;
+  --ink: #18121f;
+  --ink-2: #3a3245;
+  --muted: #5c5368;
+  --accent: #6a3fc6;
+  --accent-ink: #faf7ff;
+  --accent-soft: #e5dbfb;
+  --focus: #6f3fe0;
+  --danger: #ac3031;
+  --danger-ink: #fef9f8;
+  --danger-bg: #ffe4e1;
+  --warn: #8a5600;
+  --warn-bg: #f8eace;
+  --ok: #246e3a;
+  --ok-bg: #dcf2df;
+  --label-bg: rgba(6, 5, 9, 0.72);
+  --label-ink: #f5f2f8;
+  --cover-scrim: linear-gradient(to top, rgba(4, 3, 6, 0.85) 0%, rgba(4, 3, 6, 0) 60%);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.12);
+  color-scheme: light;
+}
+
+html[data-theme="dark"][data-scheme="rose"] {
+  --bg: #170c11;
+  --surface: #201319;
+  --surface-2: #2a1b22;
+  --rail: #0e070a;
+  --line: #402d36;
+  --ink: #f3e8ec;
+  --ink-2: #d6c5cc;
+  --muted: #ab97a0;
+  --accent: #ff86ad;
+  --accent-ink: #1a0910;
+  --accent-soft: #46182b;
+  --focus: #ff9dbd;
+  --danger: #ed756e;
+  --danger-ink: #170c0b;
+  --danger-bg: #3f1917;
+  --warn: #f0ba59;
+  --warn-bg: #362607;
+  --ok: #76cf8a;
+  --ok-bg: #122d19;
+  --label-bg: rgba(9, 5, 6, 0.72);
+  --label-ink: #f8f1f4;
+  --cover-scrim: linear-gradient(to top, rgba(6, 3, 4, 0.85) 0%, rgba(6, 3, 4, 0) 60%);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.45);
+  color-scheme: dark;
+}
+
+html[data-theme="light"][data-scheme="rose"] {
+  --bg: #fbf1f4;
+  --surface: #fffbfc;
+  --surface-2: #f4e6eb;
+  --rail: #f0e3e7;
+  --line: #e3cdd5;
+  --ink: #200f16;
+  --ink-2: #452f38;
+  --muted: #6a535c;
+  --accent: #b4285c;
+  --accent-ink: #fff7fa;
+  --accent-soft: #fbd9e5;
+  --focus: #c02462;
+  --danger: #ac3031;
+  --danger-ink: #fef9f8;
+  --danger-bg: #ffe4e1;
+  --warn: #8a5600;
+  --warn-bg: #f8eace;
+  --ok: #246e3a;
+  --ok-bg: #dcf2df;
+  --label-bg: rgba(9, 5, 6, 0.72);
+  --label-ink: #f8f1f4;
+  --cover-scrim: linear-gradient(to top, rgba(6, 3, 4, 0.85) 0%, rgba(6, 3, 4, 0) 60%);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.12);
+  color-scheme: light;
+}
+
+html[data-theme="dark"][data-scheme="sand"] {
+  --bg: #14110a;
+  --surface: #1d1911;
+  --surface-2: #27221a;
+  --rail: #0c0a06;
+  --line: #3c362b;
+  --ink: #f1ede4;
+  --ink-2: #d1cbbd;
+  --muted: #a59f90;
+  --accent: #e8c060;
+  --accent-ink: #151005;
+  --accent-soft: #3a2e10;
+  --focus: #f5d27e;
+  --danger: #ed756e;
+  --danger-ink: #170c0b;
+  --danger-bg: #3f1917;
+  --warn: #f0ba59;
+  --warn-bg: #362607;
+  --ok: #76cf8a;
+  --ok-bg: #122d19;
+  --label-bg: rgba(8, 6, 4, 0.72);
+  --label-ink: #f7f4ef;
+  --cover-scrim: linear-gradient(to top, rgba(5, 4, 2, 0.85) 0%, rgba(5, 4, 2, 0) 60%);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.45);
+  color-scheme: dark;
+}
+
+html[data-theme="light"][data-scheme="sand"] {
+  --bg: #f8f4ea;
+  --surface: #fefcf7;
+  --surface-2: #f0eadc;
+  --rail: #ece6d9;
+  --line: #ddd4c0;
+  --ink: #1d1910;
+  --ink-2: #423c2f;
+  --muted: #635c4d;
+  --accent: #7f5800;
+  --accent-ink: #fffaf0;
+  --accent-soft: #f6e6bd;
+  --focus: #8f6200;
+  --danger: #ac3031;
+  --danger-ink: #fef9f8;
+  --danger-bg: #ffe4e1;
+  --warn: #8a5600;
+  --warn-bg: #f8eace;
+  --ok: #246e3a;
+  --ok-bg: #dcf2df;
+  --label-bg: rgba(8, 6, 4, 0.72);
+  --label-ink: #f7f4ef;
+  --cover-scrim: linear-gradient(to top, rgba(5, 4, 2, 0.85) 0%, rgba(5, 4, 2, 0) 60%);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.12);
+  color-scheme: light;
+}
+
+html[data-theme="dark"][data-scheme="volt"] {
+  --bg: #0c0d0b;
+  --surface: #141612;
+  --surface-2: #1d201a;
+  --rail: #070807;
+  --line: #30342b;
+  --ink: #eceee8;
+  --ink-2: #c8ccc0;
+  --muted: #9a9f92;
+  --accent: #c6f05a;
+  --accent-ink: #0f1405;
+  --accent-soft: #2c3a10;
+  --focus: #d6ff70;
+  --danger: #ed756e;
+  --danger-ink: #170c0b;
+  --danger-bg: #3f1917;
+  --warn: #f0ba59;
+  --warn-bg: #362607;
+  --ok: #76cf8a;
+  --ok-bg: #122d19;
+  --label-bg: rgba(5, 5, 4, 0.72);
+  --label-ink: #f4f5f1;
+  --cover-scrim: linear-gradient(to top, rgba(3, 3, 3, 0.85) 0%, rgba(3, 3, 3, 0) 60%);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.45);
+  color-scheme: dark;
+}
+
+html[data-theme="light"][data-scheme="volt"] {
+  --bg: #f3f6ee;
+  --surface: #fcfdf9;
+  --surface-2: #e9eee1;
+  --rail: #e6eade;
+  --line: #d0d8c4;
+  --ink: #12160c;
+  --ink-2: #343b2a;
+  --muted: #565e4a;
+  --accent: #476a00;
+  --accent-ink: #f8fcf0;
+  --accent-soft: #e0efc0;
+  --focus: #4f7a00;
+  --danger: #ac3031;
+  --danger-ink: #fef9f8;
+  --danger-bg: #ffe4e1;
+  --warn: #8a5600;
+  --warn-bg: #f8eace;
+  --ok: #246e3a;
+  --ok-bg: #dcf2df;
+  --label-bg: rgba(5, 5, 4, 0.72);
+  --label-ink: #f4f5f1;
+  --cover-scrim: linear-gradient(to top, rgba(3, 3, 3, 0.85) 0%, rgba(3, 3, 3, 0) 60%);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.12);
+  color-scheme: light;
+}
+
+html[data-theme="dark"][data-scheme="mono"] {
+  --bg: #0e0e0f;
+  --surface: #161618;
+  --surface-2: #1f1f22;
+  --rail: #080809;
+  --line: #333337;
+  --ink: #ededee;
+  --ink-2: #c8c8cb;
+  --muted: #9a9a9f;
+  --accent: #e4e4e7;
+  --accent-ink: #111113;
+  --accent-soft: #2e2e33;
+  --focus: #ffffff;
+  --danger: #ed756e;
+  --danger-ink: #170c0b;
+  --danger-bg: #3f1917;
+  --warn: #f0ba59;
+  --warn-bg: #362607;
+  --ok: #76cf8a;
+  --ok-bg: #122d19;
+  --label-bg: rgba(5, 5, 6, 0.72);
+  --label-ink: #f4f4f5;
+  --cover-scrim: linear-gradient(to top, rgba(4, 4, 4, 0.85) 0%, rgba(4, 4, 4, 0) 60%);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.45);
+  color-scheme: dark;
+}
+
+html[data-theme="light"][data-scheme="mono"] {
+  --bg: #f3f3f4;
+  --surface: #fcfcfc;
+  --surface-2: #ebebed;
+  --rail: #e7e7e9;
+  --line: #d4d4d8;
+  --ink: #121214;
+  --ink-2: #333338;
+  --muted: #55555b;
+  --accent: #1d1d20;
+  --accent-ink: #fafafa;
+  --accent-soft: #e1e1e5;
+  --focus: #000000;
+  --danger: #ac3031;
+  --danger-ink: #fef9f8;
+  --danger-bg: #ffe4e1;
+  --warn: #8a5600;
+  --warn-bg: #f8eace;
+  --ok: #246e3a;
+  --ok-bg: #dcf2df;
+  --label-bg: rgba(5, 5, 6, 0.72);
+  --label-ink: #f4f4f5;
+  --cover-scrim: linear-gradient(to top, rgba(4, 4, 4, 0.85) 0%, rgba(4, 4, 4, 0) 60%);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.12);
+  color-scheme: light;
+}
 html[data-theme="dark"] .dot[data-scheme="abyss"] { --accent: #4dbcd4; }
 html[data-theme="dark"] .dot[data-scheme="ember"] { --accent: #f2966c; }
 html[data-theme="dark"] .dot[data-scheme="moss"] { --accent: #76be86; }
 html[data-theme="light"] .dot[data-scheme="abyss"] { --accent: #00687e; }
 html[data-theme="light"] .dot[data-scheme="ember"] { --accent: #a44c1d; }
 html[data-theme="light"] .dot[data-scheme="moss"] { --accent: #206b38; }
+html[data-theme="dark"] .dot[data-scheme="cobalt"] { --accent: #6ea8ff; }
+html[data-theme="light"] .dot[data-scheme="cobalt"] { --accent: #1c56c4; }
+html[data-theme="dark"] .dot[data-scheme="dusk"] { --accent: #b79bff; }
+html[data-theme="light"] .dot[data-scheme="dusk"] { --accent: #6a3fc6; }
+html[data-theme="dark"] .dot[data-scheme="rose"] { --accent: #ff86ad; }
+html[data-theme="light"] .dot[data-scheme="rose"] { --accent: #b4285c; }
+html[data-theme="dark"] .dot[data-scheme="sand"] { --accent: #e8c060; }
+html[data-theme="light"] .dot[data-scheme="sand"] { --accent: #7f5800; }
+html[data-theme="dark"] .dot[data-scheme="volt"] { --accent: #c6f05a; }
+html[data-theme="light"] .dot[data-scheme="volt"] { --accent: #476a00; }
+html[data-theme="dark"] .dot[data-scheme="mono"] { --accent: #e4e4e7; }
+html[data-theme="light"] .dot[data-scheme="mono"] { --accent: #1d1d20; }
 
 @media (prefers-reduced-motion: reduce) {
 :root { --dur: 0ms; }
@@ -255,7 +604,7 @@ html, body { margin: 0; height: 100%; overflow-x: clip; }
 html, body { background: var(--bg); }
 body {
   display: -webkit-box; display: flex; overflow: hidden;
-  color: var(--ink); font-family: var(--font-sans); font-size: 1rem; line-height: 1.45;
+  color: var(--ink); font-family: var(--font-sans); font-size: 1.1rem; line-height: 1.45;
   -webkit-font-smoothing: antialiased;
 }
 [hidden] { display: none !important; }
@@ -287,7 +636,7 @@ button, a.button {
 }
 button:hover, a.button:hover { background: var(--control-hover); }
 button:active { -webkit-transform: translateY(1px); transform: translateY(1px); }
-button.small { height: 2.2rem; padding: 0 var(--space-3); font-size: 0.85rem; }
+button.small { height: 2.2rem; padding: 0 var(--space-3); font-size: 1.1rem; }
 button.primary { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 button.danger { background: var(--danger-bg); color: var(--danger); }
 button.primary:hover, button.danger:hover { opacity: 0.85; }
@@ -316,7 +665,7 @@ button.rail-toggle:hover { background: var(--surface-2); color: var(--ink); }
 .rail .rail-item {
   display: flex; align-items: center; justify-content: flex-start; gap: var(--space-3);
   width: 100%; height: 2.9rem; padding: 0 var(--space-3); border: 0; border-radius: var(--radius);
-  background: transparent; color: var(--ink-2); font-size: 1rem; font-weight: 500; text-align: start;
+  background: transparent; color: var(--ink-2); font-size: 1.1rem; font-weight: 500; text-align: start;
 }
 .rail .rail-item .icon { width: 1.4rem; height: 1.4rem; }
 .rail .rail-item:hover { background: var(--surface-2); color: var(--ink); }
@@ -352,11 +701,28 @@ html.rail-collapsed .rail-toggle .icon { -webkit-transform: rotate(180deg); tran
 .seg-opt {
   display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
   height: 2.4rem; padding: 0 var(--space-4); border: 1px solid transparent; border-radius: var(--radius);
-  background: var(--control); color: var(--ink-2); font: inherit; font-size: 0.95rem; font-weight: 500;
+  background: var(--control); color: var(--ink-2); font: inherit; font-size: 1.1rem; font-weight: 500;
   white-space: nowrap; cursor: pointer;
 }
 .seg-opt:hover { background: var(--control-hover); color: var(--ink); }
 .chips { display: flex; align-items: center; gap: var(--space-2); }
+.itabs { flex-wrap: wrap; margin-bottom: var(--space-4); }
+/* Settings > Appearance: its rows, an inset separator (margin keeps it off the box edges, as the row
+   dividers), then the address QR code (ps5-dump-forge's Connect). The code
+   takes the height the rows leave after the address (flex-basis 0, so it never makes the box taller). */
+.group.appear { display: flex; align-items: stretch; gap: var(--space-5); }
+.appear-main { flex: 1 1 auto; min-width: 0; }
+.appear-qr { flex: none; width: 16rem; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--space-2); margin: var(--space-4) 0; padding: 0 0 0 var(--space-5); border-left: 1px solid var(--line); text-align: center; }
+.appear-qr[hidden] { display: none; }
+[dir="rtl"] .appear-qr { padding: 0 var(--space-5) 0 0; border-left: 0; border-right: 1px solid var(--line); }
+.appear-qr .qr { flex: 1 1 0; min-height: 0; width: 100%; display: flex; justify-content: center; }
+.appear-qr .qr svg { display: block; height: 100%; width: auto; max-width: 100%; border-radius: var(--radius-sm); }
+.appear-qr code { font-size: 1.1rem; font-weight: 700; white-space: nowrap; }
+@media (max-width: 699px) { .appear-qr { display: none; } }
+/* The Library's selector, search and drives: one size up from the other controls. */
+#chips .seg-opt { height: 2.7rem; font-size: 1.1rem; }
+#chips .count { font-size: 1rem; }
 .chips .seg-opt[aria-pressed="true"] { border-color: transparent; box-shadow: none; background: var(--accent-soft); color: var(--ink); font-weight: 600; }
 /* PS5 L2 / R2 hints: shoulder keycaps, out of the Tab order (the triggers are the binding). */
 button.shoulder {
@@ -367,25 +733,25 @@ button.shoulder {
 button.shoulder:hover { color: var(--ink); }
 .count {
   display: inline-flex; align-items: center; justify-content: center;
-  min-width: 1.4rem; height: 1.4rem; padding: 0 var(--space-1); border-radius: var(--radius-sm);
-  background: var(--surface-2); color: var(--ink-2); font-size: 0.75rem; font-weight: 600;
+  min-width: 1.7rem; height: 1.7rem; padding: 0 var(--space-1); border-radius: var(--radius-sm);
+  background: var(--surface-2); color: var(--ink-2); font-size: 1rem; font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 .seg-opt[aria-pressed="true"] .count { background: var(--accent); color: var(--accent-ink); }
 /* Search: compact, a magnifier drawn inline (no external request).
    ponytail: the data-URI stroke is a fixed mid grey that reads on both themes; following --muted needs -webkit-mask. */
 .search {
-  display: block; width: 18rem; max-width: 100%; height: 2.4rem; padding: 0 var(--space-3) 0 2.4rem;
-  border: 1px solid transparent; border-radius: var(--radius); color: var(--ink); font: inherit; font-size: 0.95rem;
-  background: var(--control) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") no-repeat 0.75rem center / 1.1rem;
+  display: block; width: 20rem; max-width: 100%; height: 2.7rem; padding: 0 var(--space-3) 0 2.6rem;
+  border: 1px solid transparent; border-radius: var(--radius); color: var(--ink); font: inherit; font-size: 1.1rem;
+  background: var(--control) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") no-repeat 0.75rem center / 1.25rem;
   -webkit-appearance: none; appearance: none;
 }
 .search::placeholder { color: var(--muted); }
-[dir="rtl"] .search { padding: 0 2.4rem 0 var(--space-3); background-position: right 0.75rem center; }
+[dir="rtl"] .search { padding: 0 2.6rem 0 var(--space-3); background-position: right 0.75rem center; }
 .storage { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); min-width: 0; margin-left: auto; }
 .storage[hidden] { display: none; }
 /* Drives: compact chips that filter the grid (label, use meter, free space). */
-button.drive { height: 2.4rem; gap: var(--space-2); padding: 0 var(--space-3); font-size: 0.88rem; }
+button.drive { height: 2.7rem; gap: var(--space-2); padding: 0 var(--space-3); font-size: 1rem; }
 button.drive b { font-weight: 600; }
 button.drive .free { color: var(--muted); font-variant-numeric: tabular-nums; }
 button.drive[aria-pressed="true"] { border-color: transparent; box-shadow: none; background: var(--accent-soft); color: var(--ink); font-weight: 600; }
@@ -421,17 +787,17 @@ html.kbd .card:focus .info h3, html.kbd .card:focus .info p { color: var(--accen
 }
 .badge, .card .status-pill, .card .running-pill {
   position: absolute; top: var(--space-2); padding: 0.2rem var(--space-2); border-radius: var(--radius-sm);
-  font-size: 0.72rem; font-weight: 600; letter-spacing: 0.02em; line-height: 1.3;
+  font-size: 0.94rem; font-weight: 600; letter-spacing: 0.02em; line-height: 1.3;
   background: var(--label-bg); color: var(--label-ink); white-space: nowrap; z-index: var(--z-raised);
 }
 .badge { left: var(--space-2); }
 .info { position: absolute; left: 0; right: 0; bottom: 0; padding: var(--space-3); z-index: var(--z-raised); }
 .info h3 {
-  font-size: 0.95rem; font-weight: 600; line-height: 1.25; color: var(--label-ink);
+  font-size: 1.24rem; font-weight: 600; line-height: 1.25; color: var(--label-ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .info p {
-  margin-top: 0.15rem; font: 500 0.72rem var(--font-mono); color: var(--label-ink); opacity: 0.82;
+  margin-top: 0.15rem; font: 500 0.94rem var(--font-mono); color: var(--label-ink); opacity: 0.82;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* The band under the name: the scrim fades the art in, the label backdrop guarantees contrast. */
@@ -456,25 +822,39 @@ html.kbd .card:focus .info h3, html.kbd .card:focus .info p { color: var(--accen
 .sheet-pic:before { content: ""; display: block; padding-bottom: 100%; }
 .sheet-side .btns { display: flex; flex-direction: column; gap: var(--space-2); }
 .sheet-side .btns .danger { margin-top: var(--space-3); }
-.sheet-side button { width: 100%; height: 3rem; font-size: 1rem; }
-.sheet-side .badge { left: var(--space-3); top: var(--space-3); font-size: 0.82rem; }
+/* A retail install: this card instead of the buttons (it starts only from its disc). */
+.disc-card { display: flex; gap: var(--space-3); align-items: flex-start; padding: var(--space-4); border-radius: var(--radius); background: var(--warn-bg); color: var(--warn); }
+.disc-card .icon { width: 1.6rem; height: 1.6rem; flex: none; }
+.disc-card b { display: block; font-size: 1.25rem; }
+.disc-card p { margin: var(--space-1) 0 0; font-size: 1.1rem; line-height: 1.4; color: var(--ink-2); }
+.sheet-side button { width: 100%; height: 3rem; font-size: 1.1rem; }
+.sheet-side .badge { left: var(--space-3); top: var(--space-3); font-size: 1.1rem; }
 .sheet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
 .sheet-head h2 { font-size: 2.2rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; overflow-wrap: anywhere; min-width: 0; }
-.sheet-head p { margin-top: var(--space-2); font: 500 0.95rem var(--font-mono); color: var(--muted); }
+.sheet-head p { margin-top: var(--space-2); font: 500 1.1rem var(--font-mono); color: var(--muted); }
+/* Status and type: tags after the title id and version (the sheet is --surface, so the tags take --surface-2). */
+.sheet-head .m-status { margin-left: var(--space-2); font-family: var(--font-sans); font-size: 1.1rem; vertical-align: 0.1em; background: var(--surface-2); color: var(--ink-2); }
+.sheet-head .m-status.green { background: var(--ok-bg); color: var(--ok); }
+#m-status { margin-left: var(--space-3); }
+[dir="rtl"] .sheet-head .m-status { margin-left: 0; margin-right: var(--space-2); }
+[dir="rtl"] #m-status { margin-right: var(--space-3); }
 button.close { flex: none; width: 3rem; height: 3rem; padding: 0; }
 button.close .icon { width: 1.3rem; height: 1.3rem; }
 .panel { border-radius: var(--radius); padding: var(--space-5) var(--space-6); background: var(--surface-2); overflow: auto; }
-.fields { display: grid; grid-template-columns: 12rem minmax(0, 1fr); gap: var(--space-3) var(--space-5); margin: 0; }
-.fields dt { color: var(--muted); font-size: 0.95rem; }
-.fields dd { margin: 0; font-size: 1rem; word-wrap: break-word; overflow-wrap: break-word; min-width: 0; }
-.fields dd.mono { font-family: var(--font-mono); font-size: 0.9rem; }
-.tag { display: inline-block; padding: 0.15rem var(--space-2); border-radius: var(--radius-sm); font-size: 0.82rem; font-weight: 600; background: var(--surface); border: 0; }
+/* Two columns, the label above the value; a path (.wide) takes the whole row. */
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4) var(--space-6); margin: 0; }
+.fields > div { min-width: 0; }
+.fields .wide { grid-column: 1 / -1; }
+.fields dt { color: var(--muted); font-size: 1.1rem; }
+.fields dd { margin: 2px 0 0; font-size: 1.1rem; word-wrap: break-word; overflow-wrap: break-word; min-width: 0; }
+.fields dd.mono { font-family: var(--font-mono); font-size: 1.1rem; }
+.tag { display: inline-block; padding: 0.15rem var(--space-2); border-radius: var(--radius-sm); font-size: 1rem; font-weight: 600; background: var(--surface); border: 0; }
 .tag.green { background: var(--ok-bg); border-color: var(--ok-bg); color: var(--ok); }
 .storage-line { border-radius: var(--radius); padding: var(--space-4) var(--space-6); background: var(--surface-2); }
-.storage-line h3 { font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+.storage-line h3 { font-size: 1.1rem; font-weight: 600; color: var(--muted); }
 .stack { display: flex; height: 0.6rem; margin: var(--space-3) 0; border-radius: var(--radius-sm); overflow: hidden; background: var(--surface); }
 .stack i { display: block; height: 100%; }
-.legend { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-6); font-size: 0.92rem; font-variant-numeric: tabular-nums; }
+.legend { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-6); font-size: 1.1rem; font-variant-numeric: tabular-nums; }
 .legend span:before { content: ""; display: inline-block; width: 0.65rem; height: 0.65rem; margin-right: var(--space-2); border-radius: 50%; background: var(--c); }
 /* ponytail: the four storage parts reuse the status tokens instead of four new legend colors. */
 .c-game { --c: var(--accent); } .c-dlc { --c: var(--warn); } .c-save { --c: var(--ok); } .c-cache { --c: var(--muted); }
@@ -493,28 +873,28 @@ button.close .icon { width: 1.3rem; height: 1.3rem; }
 .settings { max-width: 60rem; }
 .settings-top { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-5); }
 .settings-top h2 { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.01em; }
-.msg { min-height: 1.2em; color: var(--muted); font-size: 0.9rem; overflow-wrap: break-word; }
+.msg { min-height: 1.2em; color: var(--muted); font-size: 1.1rem; overflow-wrap: break-word; }
 .msg { -webkit-transition: opacity var(--dur) var(--ease-out); transition: opacity var(--dur) var(--ease-out); }
 .msg.gone { opacity: 0; }
 .msg.err { color: var(--danger); }
 /* Grouped lists (as iOS): a filled box with no border; dividers between items are inset to the
    text, so they never reach the box edges. */
 .group { margin-bottom: var(--space-5); padding: 0 var(--space-5); border-radius: var(--radius-lg); background: var(--surface); }
-.group > h3 { padding: var(--space-4) 0 var(--space-1); font-size: 1.05rem; font-weight: 600; }
-.group > .ghint { padding: 0 0 var(--space-2); color: var(--muted); font-size: 0.85rem; }
+.group > h3, .appear-main > h3 { padding: var(--space-4) 0 var(--space-1); font-size: 1.25rem; font-weight: 600; }
+.group > .ghint { padding: 0 0 var(--space-2); color: var(--muted); font-size: 1.1rem; }
 .row {
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-5);
   padding: var(--space-3) 0; min-height: 3.6rem;
 }
 .row + .row { border-top: 1px solid var(--line); }
 .row.col { display: block; }
-.row .lbl { font-size: 1rem; font-weight: 500; }
-.row .hint { display: block; margin-top: 0.15rem; font-size: 0.82rem; color: var(--muted); }
+.row .lbl { font-size: 1.1rem; font-weight: 500; }
+.row .hint { display: block; margin-top: 0.15rem; font-size: 1.1rem; color: var(--muted); }
 .row textarea, .row input[type="number"], .row select {
   font: inherit; color: var(--ink); background: var(--control); border: 1px solid transparent;
   border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3);
 }
-.row textarea { display: block; width: 100%; min-height: 5.5rem; margin-top: var(--space-3); font-family: var(--font-mono); font-size: 0.9rem; resize: vertical; }
+.row textarea { display: block; width: 100%; min-height: 5.5rem; margin-top: var(--space-3); font-family: var(--font-mono); font-size: 1.1rem; resize: vertical; }
 .row input[type="number"] { width: 8rem; text-align: right; font-variant-numeric: tabular-nums; }
 .row select { max-width: 30rem; min-width: 0; }
 .row select option { background: var(--surface); color: var(--ink); }
@@ -542,44 +922,46 @@ button.close .icon { width: 1.3rem; height: 1.3rem; }
 .segmented button[aria-pressed="true"] { background: var(--accent-soft); color: var(--ink); font-weight: 600; }
 /* Color scheme: three swatches; each dot carries its own data-scheme so the tokens paint its accent. */
 .swatches { display: flex; flex: none; gap: var(--space-2); }
-button.swatch { height: 2.6rem; padding: 0 var(--space-3) 0 var(--space-2); gap: var(--space-2); }
-.swatch .dot { width: 1.4rem; height: 1.4rem; border-radius: 50%; background: var(--accent); border: 2px solid var(--surface); }
+/* Dots only (each a scheme's accent); the name is the button's aria-label and title. */
+.swatches { flex-wrap: wrap; justify-content: flex-end; }
+button.swatch { width: 2.8rem; height: 2.8rem; padding: 0; justify-content: center; }
+.swatch .dot { width: 1.6rem; height: 1.6rem; border-radius: 50%; background: var(--accent); border: 2px solid var(--surface); }
 button.swatch[aria-checked="true"] { border-color: transparent; box-shadow: none; background: var(--accent-soft); color: var(--ink); font-weight: 600; }
 /* Backports screen: one row per game with a backport. */
-.bphint { margin: 0 0 var(--space-4); color: var(--muted); font-size: 0.92rem; }
+.bphint { margin: 0 0 var(--space-4); color: var(--muted); font-size: 1.1rem; }
 #bpoff { margin-bottom: var(--space-4); }
 .bprow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); padding: var(--space-3) 0; border-top: 1px solid var(--line); }
 .bprow:first-child { border-top: 0; }
 .bprow .bpname { flex: 1 1 16rem; min-width: 0; }
 .bprow .bpname b { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bprow .bpname span { color: var(--muted); font: 0.82rem var(--font-mono); }
-.bprow code { flex: 2 1 20rem; min-width: 0; color: var(--ink-2); font: 0.85rem var(--font-mono); overflow-wrap: anywhere; }
-.bprow .bpstate { flex: none; min-width: 11rem; text-align: center; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); font-size: 0.8rem; font-weight: 600; background: var(--surface-2); color: var(--muted); }
+.bprow .bpname span { color: var(--muted); font: 1.1rem var(--font-mono); }
+.bprow code { flex: 2 1 20rem; min-width: 0; color: var(--ink-2); font: 1.1rem var(--font-mono); overflow-wrap: anywhere; }
+.bprow .bpstate { flex: none; min-width: 11rem; text-align: center; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); font-size: 1rem; font-weight: 600; background: var(--surface-2); color: var(--muted); }
 .bprow .bpstate.on { background: var(--ok-bg); color: var(--ok); }
 .bprow button { flex: none; }
 #bplist:empty, #hdlist:empty { display: none; }
-.bprow .hdkind { flex: none; min-width: 3.5rem; text-align: center; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); font: 600 0.75rem var(--font-mono); background: var(--surface-2); color: var(--ink-2); }
+.bprow .hdkind { flex: none; min-width: 3.5rem; text-align: center; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); font: 600 1rem var(--font-mono); background: var(--surface-2); color: var(--ink-2); }
 #hdlist code { flex-basis: 12rem; }
 /* Storage screen: one card per connected drive. */
 .dcard { padding: var(--space-4) var(--space-5); }
 .dhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-3); }
-.dhead h3 { font-size: 1.15rem; font-weight: 600; }
-.dhead .dkind { color: var(--muted); font-size: 0.9rem; }
-.dhead code { margin-left: auto; color: var(--muted); font: 0.85rem var(--font-mono); }
+.dhead h3 { font-size: 1.25rem; font-weight: 600; }
+.dhead .dkind { color: var(--muted); font-size: 1rem; }
+.dhead code { margin-left: auto; color: var(--muted); font: 1.1rem var(--font-mono); }
 .dcard .meter { display: block; width: 100%; height: 0.6rem; margin: var(--space-3) 0 var(--space-2); }
 .dcard .meter i { -webkit-transition: width var(--dur) var(--ease-out); transition: width var(--dur) var(--ease-out); }
-.dstats { color: var(--ink-2); font-size: 0.92rem; font-variant-numeric: tabular-nums; }
+.dstats { color: var(--ink-2); font-size: 1.1rem; font-variant-numeric: tabular-nums; }
 .dfoot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-top: var(--space-3); }
-.dfoot .dgames { color: var(--muted); font-size: 0.9rem; margin-right: auto; font-variant-numeric: tabular-nums; }
+.dfoot .dgames { color: var(--muted); font-size: 1.1rem; margin-right: auto; font-variant-numeric: tabular-nums; }
 [dir="rtl"] .dhead code { margin-left: 0; margin-right: auto; }
 [dir="rtl"] .dfoot .dgames { margin-right: 0; margin-left: auto; }
 .settings-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-3) 0; }
-.settings-info { padding: 0 0 var(--space-3); color: var(--muted); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.settings-info { padding: 0 0 var(--space-3); color: var(--muted); font-size: 1.1rem; font-variant-numeric: tabular-nums; }
 .logbox.open { padding: 0 0 var(--space-4); }
 .logbox pre {
   display: none; max-height: 22rem; margin: 0; padding: var(--space-4);
   border-radius: var(--radius); background: var(--bg); border: 0; color: var(--ink-2);
-  overflow: auto; font: 0.8rem/1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: break-word;
+  overflow: auto; font: 1rem/1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: break-word;
 }
 .logbox.open pre { display: block; }
 .group .banner { margin: 0 0 var(--space-3); }
@@ -602,17 +984,17 @@ button.swatch[aria-checked="true"] { border-color: transparent; box-shadow: none
 /* Over art the pills keep the dark label backdrop; the state shows as colored ink plus a dot. */
 .card .status-pill.s-duplicate { color: var(--label-warn); }
 .card .status-pill.s-building, .card .status-pill.s-checking { background: var(--accent); color: var(--accent-ink); }
-.card .running-pill { top: 2.1rem; color: var(--label-ok); }
+.card .running-pill { top: 2.6rem; color: var(--label-ok); }
 .card .running-pill:before, .card .status-pill.s-duplicate:before {
   content: ""; display: inline-block; width: 0.45rem; height: 0.45rem; margin-right: 0.3rem;
   border-radius: 50%; background: currentColor; vertical-align: 0.05rem;
 }
 .card .status-pill[hidden] + .running-pill { top: var(--space-2); }
 /* Installed games: a second badge (Retail) under the source badge. */
-.badge.b2 { top: calc(var(--space-2) + 1.45rem); }
+.badge.b2 { top: calc(var(--space-2) + 1.85rem); }
 .badge.inst { color: var(--label-ok); }
 .badge.retail { color: var(--label-warn); }
-.sheet-side .badge.b2 { top: calc(var(--space-3) + 1.6rem); }
+.sheet-side .badge.b2 { top: calc(var(--space-3) + 2.1rem); }
 /* Install screen: the running job, its queue, the patch/DLC and kept .pkg rows. */
 .rail .rail-item { position: relative; }
 .rail-pct { margin-left: auto; padding: 0.1rem var(--space-2); border-radius: var(--radius-sm); background: var(--accent); color: var(--accent-ink); font: 700 0.78rem var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -622,26 +1004,25 @@ html.rail-collapsed .rail-pct { position: absolute; right: 0; bottom: 0.1rem; ma
 .ijob { padding: var(--space-4) var(--space-5); }
 .ijob-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
 .ijob-head .bpname { flex: 1 1 16rem; min-width: 0; }
-.ijob-head .bpname b { display: block; font-size: 1.1rem; font-weight: 600; overflow-wrap: anywhere; }
-.ijob-head .bpname span { color: var(--muted); font: 0.85rem var(--font-mono); }
-.ijob-phase { padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--accent); font-size: 0.8rem; font-weight: 600; }
+.ijob-head .bpname b { display: block; font-size: 1.25rem; font-weight: 600; overflow-wrap: anywhere; }
+.ijob-head .bpname span { color: var(--muted); font: 1.1rem var(--font-mono); }
+.ijob-phase { padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--accent); font-size: 1rem; font-weight: 600; }
 .ijob-phase.err { background: var(--danger-bg); color: var(--danger); }
 .meter.ibar { width: 100%; height: 0.6rem; margin: var(--space-3) 0 var(--space-2); }
 .meter.ibar i { -webkit-transition: width var(--dur) var(--ease-out); transition: width var(--dur) var(--ease-out); }
-.ijob-nums { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; color: var(--ink-2); font-size: 0.92rem; }
-.iqueue { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--line); font-size: 0.92rem; }
+.ijob-nums { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; color: var(--ink-2); font-size: 1.1rem; }
+.iqueue { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--line); font-size: 1.1rem; }
 .ilbl { color: var(--muted); }
 .ihint { margin: 0 0 var(--space-2); }
 #pdempty { padding-bottom: var(--space-4); }
 #pdlist:empty, #keptlist:empty, #imsg:empty { display: none; }
-.bprow .pdkind { flex: none; min-width: 4rem; text-align: center; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); font: 600 0.75rem var(--font-mono); background: var(--surface-2); color: var(--ink-2); }
-.bprow .pdsize { flex: none; min-width: 5rem; text-align: right; color: var(--ink-2); font-variant-numeric: tabular-nums; font-size: 0.9rem; }
-.bprow .pdwhy { flex: none; max-width: 100%; color: var(--muted); font-size: 0.82rem; overflow-wrap: anywhere; }
+.bprow .pdkind { flex: none; min-width: 4rem; text-align: center; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); font: 600 1rem var(--font-mono); background: var(--surface-2); color: var(--ink-2); }
+.bprow .pdsize { flex: none; min-width: 5rem; text-align: right; color: var(--ink-2); font-variant-numeric: tabular-nums; font-size: 1.1rem; }
+.bprow .pdwhy { flex: none; max-width: 100%; color: var(--muted); font-size: 1.1rem; overflow-wrap: anywhere; }
 .bprow .pdwhy.err { color: var(--danger); }
 #keptlist code { flex-basis: 12rem; }
 /* Game sheet note: installed (ok) or a failed install (err). */
-.m-note { margin-bottom: var(--space-4); padding: var(--space-3) var(--space-4); border-radius: var(--radius); background: var(--warn-bg); color: var(--warn); font-size: 0.95rem; overflow-wrap: break-word; }
-.m-note.ok { background: var(--ok-bg); color: var(--ok); }
+.m-note { margin-bottom: var(--space-4); padding: var(--space-3) var(--space-4); border-radius: var(--radius); background: var(--warn-bg); color: var(--warn); font-size: 1.1rem; overflow-wrap: break-word; }
 .m-note.err { background: var(--danger-bg); color: var(--danger); }
 
 @media (prefers-reduced-motion: reduce) {
@@ -670,7 +1051,7 @@ html.rail-collapsed .rail-pct { position: absolute; right: 0; bottom: 0.1rem; ma
   .sheet-head { margin-bottom: 16px; }
   .sheet-head h2 { font-size: 1.5rem; }
   .panel { margin-bottom: 16px; }
-  .fields { grid-template-columns: 8rem minmax(0, 1fr); }
+  .fields { grid-template-columns: minmax(0, 1fr); }
 }
 /* Phones: the rail turns into a bottom bar of icons. */
 @media (max-width: 699px) {
@@ -737,8 +1118,8 @@ html.kbd .sheet button:focus, html.kbd .dialog button:focus { background: var(--
 html.kbd .sheet button.danger:focus, html.kbd .dialog button.danger:focus { background: var(--danger); border-color: var(--danger); color: var(--danger-ink); }
 html.kbd .sheet button.primary:focus { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 
-/* ============ THE ABYSS — paleta propia del Kraken (override sobre el esquema abyss de upstream) ============ */
-:root, html[data-theme="dark"][data-scheme="abyss"] {
+/* ============ THE ABYSS — paleta propia del Kraken (solo sobre el tema "abyss"; los demás temas quedan intactos) ============ */
+html[data-theme="dark"][data-scheme="abyss"] {
   --accent: #2fe0c8;          /* teal bioluminiscente */
   --accent-ink: #042018;
   --accent-soft: #0a2e2b;
@@ -752,9 +1133,9 @@ html.kbd .sheet button.primary:focus { background: var(--accent); border-color: 
   --ink-2: #c3d2d8;
   --muted: #86a0b0;
 }
-/* Fondo océano abisal en capas fijas detrás del contenido */
-body { position: relative; }
-body::before {
+/* Fondo océano abisal en capas fijas detrás del contenido (solo tema abyss) */
+html[data-theme="dark"][data-scheme="abyss"] body { position: relative; }
+html[data-theme="dark"][data-scheme="abyss"] body::before {
   content: ""; position: fixed; inset: 0; z-index: -2; pointer-events: none;
   background:
     radial-gradient(120rem 60rem at 50% -8%, rgba(47, 224, 200, 0.10), transparent 60%),
@@ -762,7 +1143,7 @@ body::before {
     radial-gradient(80rem 50rem at 12% 10%, rgba(42, 143, 212, 0.08), transparent 60%),
     linear-gradient(180deg, #06131f 0%, #04101a 45%, #03080f 100%);
 }
-body::after {
+html[data-theme="dark"][data-scheme="abyss"] body::after {
   content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: 0.5;
   background-repeat: no-repeat;
   background-image:
@@ -774,8 +1155,7 @@ body::after {
   animation: abyss-bubbles 16s linear infinite;
 }
 @keyframes abyss-bubbles { from { transform: translateY(0); } to { transform: translateY(-130vh); } }
-/* Glow bioluminiscente en acentos clave */
-button.primary { box-shadow: 0 0 0.8rem rgba(47, 224, 200, 0.35); }
+html[data-theme="dark"][data-scheme="abyss"] button.primary { box-shadow: 0 0 0.8rem rgba(47, 224, 200, 0.35); }
 </style>
 </head>
 <body>
@@ -865,6 +1245,13 @@ button.primary { box-shadow: 0 0 0.8rem rgba(47, 224, 200, 0.35); }
     <div class="settings-top"><h2 data-i18n="installTab">Install</h2></div>
     <p class="bphint" data-i18n="iHint">Installs a package with the console's own installer. Base games are installed from their game sheet in the Library; patches and DLC found in the scan folders are listed here.</p>
     <p class="msg err" id="imsg" role="alert"></p>
+    <div class="chips itabs" id="itabs" role="group" aria-label="Install" data-i18n-aria="installTab">
+      <button class="seg-opt" type="button" id="itab-run" data-itab="run"><span data-i18n="itRun">Running</span></button>
+      <button class="seg-opt" type="button" id="itab-pd" data-itab="pd"><span data-i18n="gPatches">Patches and DLC</span> <span class="count" id="itab-pd-n"></span></button>
+      <button class="seg-opt" type="button" id="itab-kept" data-itab="kept"><span data-i18n="itKept">Already installed</span> <span class="count" id="itab-kept-n"></span></button>
+    </div>
+    <div class="ipane" data-ipane="run">
+    <p class="dstats ihint" id="irunnone" data-i18n="irunNone">Nothing is installing right now.</p>
     <section class="group ijob" id="ijob" aria-label="Installing now" data-i18n-aria="iNow" hidden>
       <div class="ijob-head">
         <div class="bpname"><b id="iname"></b><span id="isub"></span></div>
@@ -875,22 +1262,26 @@ button.primary { box-shadow: 0 0 0.8rem rgba(47, 224, 200, 0.35); }
       <div class="ijob-nums"><span id="ibytes"></span><span id="ipct"></span></div>
       <div class="iqueue" id="iqueue" hidden><span class="ilbl" data-i18n="upNext">Up next</span><span id="iqlist"></span></div>
     </section>
-    <section class="group" aria-labelledby="g-pd">
-      <h3 id="g-pd" data-i18n="gPatches">Patches and DLC</h3>
-      <div id="pdlist"></div>
-      <p class="dstats ihint" id="pdempty" hidden data-i18n="pdNone">No patch or DLC packages found in the scan folders.</p>
-    </section>
     <section class="group" aria-labelledby="g-iopt">
       <h3 id="g-iopt" data-i18n="gAfter">After install</h3>
       <label class="row"><span><span class="lbl" data-i18n="idel">Delete the .pkg after it installs</span>
         <span class="hint" id="idelhint"></span></span>
         <input type="checkbox" id="i_del"></label>
     </section>
-    <section class="group" id="ikept" aria-labelledby="g-kept" hidden>
-      <h3 id="g-kept" data-i18n="gKept">Installed, .pkg still here</h3>
+    </div>
+    <div class="ipane" data-ipane="pd" hidden>
+    <section class="group" aria-labelledby="itab-pd">
+      <div id="pdlist"></div>
+      <p class="dstats ihint" id="pdempty" hidden data-i18n="pdNone">No patch or DLC packages found in the scan folders.</p>
+    </section>
+    </div>
+    <div class="ipane" data-ipane="kept" hidden>
+    <section class="group" id="ikept" aria-labelledby="itab-kept">
       <p class="bphint ihint" data-i18n="keptHint">These are installed. Deleting the .pkg frees the drive and keeps the game.</p>
       <div id="keptlist"></div>
+      <p class="dstats ihint" id="keptnone" hidden data-i18n="keptNone">No installed game has its .pkg in the scan folders.</p>
     </section>
+    </div>
   </div>
 </section>
 
@@ -934,7 +1325,8 @@ button.primary { box-shadow: 0 0 0.8rem rgba(47, 224, 200, 0.35); }
     <h2 data-i18n="settings">Settings</h2>
     <div class="msg" id="smsg" role="status" aria-live="polite"></div>
   </div>
-  <section class="group" aria-labelledby="g-appearance">
+  <section class="group appear" aria-labelledby="g-appearance">
+    <div class="appear-main">
     <h3 id="g-appearance" data-i18n="gAppearance">Appearance</h3>
     <div class="row"><span class="lbl" id="l-theme" data-i18n="uiTheme">Theme</span>
       <div class="segmented" id="f_ui_theme" role="group" aria-labelledby="l-theme">
@@ -942,11 +1334,22 @@ button.primary { box-shadow: 0 0 0.8rem rgba(47, 224, 200, 0.35); }
       </div></div>
     <div class="row"><span class="lbl" id="l-scheme" data-i18n="uiScheme">Color scheme</span>
       <div class="swatches" id="f_ui_scheme" role="radiogroup" aria-labelledby="l-scheme">
-        <button class="swatch" type="button" role="radio" aria-checked="true" data-scheme-pick="abyss"><span class="dot" data-scheme="abyss" aria-hidden="true"></span><span>Abyss</span></button>
-        <button class="swatch" type="button" role="radio" aria-checked="false" data-scheme-pick="ember"><span class="dot" data-scheme="ember" aria-hidden="true"></span><span>Ember</span></button>
-        <button class="swatch" type="button" role="radio" aria-checked="false" data-scheme-pick="moss"><span class="dot" data-scheme="moss" aria-hidden="true"></span><span>Moss</span></button>
+        <button class="swatch" type="button" role="radio" aria-checked="true" data-scheme-pick="abyss" aria-label="Abyss" title="Abyss"><span class="dot" data-scheme="abyss" aria-hidden="true"></span></button>
+        <button class="swatch" type="button" role="radio" aria-checked="false" data-scheme-pick="ember" aria-label="Ember" title="Ember"><span class="dot" data-scheme="ember" aria-hidden="true"></span></button>
+        <button class="swatch" type="button" role="radio" aria-checked="false" data-scheme-pick="moss" aria-label="Moss" title="Moss"><span class="dot" data-scheme="moss" aria-hidden="true"></span></button>
+        <button class="swatch" type="button" role="radio" aria-checked="false" data-scheme-pick="cobalt" aria-label="Cobalt" title="Cobalt"><span class="dot" data-scheme="cobalt" aria-hidden="true"></span></button>
+        <button class="swatch" type="button" role="radio" aria-checked="false" data-scheme-pick="dusk" aria-label="Dusk" title="Dusk"><span class="dot" data-scheme="dusk" aria-hidden="true"></span></button>
+        <button class="swatch" type="button" role="radio" aria-checked="false" data-scheme-pick="rose" aria-label="Rose" title="Rose"><span class="dot" data-scheme="rose" aria-hidden="true"></span></button>
+        <button class="swatch" type="button" role="radio" aria-checked="false" data-scheme-pick="sand" aria-label="Sand" title="Sand"><span class="dot" data-scheme="sand" aria-hidden="true"></span></button>
+        <button class="swatch" type="button" role="radio" aria-checked="false" data-scheme-pick="volt" aria-label="Volt" title="Volt"><span class="dot" data-scheme="volt" aria-hidden="true"></span></button>
+        <button class="swatch" type="button" role="radio" aria-checked="false" data-scheme-pick="mono" aria-label="Mono" title="Mono"><span class="dot" data-scheme="mono" aria-hidden="true"></span></button>
       </div></div>
     <label class="row"><span class="lbl" data-i18n="language">Language</span><select id="f_lang"></select></label>
+    </div>
+    <div class="appear-qr" id="qrcard" hidden>
+      <div class="qr" id="qrimg"></div>
+      <code id="qrurl"></code>
+    </div>
   </section>
   <section class="group" aria-labelledby="g-library">
     <h3 id="g-library" data-i18n="gLibrary">Library &amp; scan</h3>
@@ -966,7 +1369,7 @@ button.primary { box-shadow: 0 0 0.8rem rgba(47, 224, 200, 0.35); }
     <label class="row"><span class="lbl" data-i18n="addEmulators">Add the bundled DLC (dlc_emu) and PlayGo (pgo_stub) emulators when a game needs them and has none</span><input type="checkbox" id="f_add_emulators"></label>
     <label class="row"><span class="lbl" data-i18n="injectAmpr">Inject ampr-emu-ng into folder games' fakelib (pkg games always get it)</span><input type="checkbox" id="f_inject_ampr"></label>
     <label class="row"><span><span class="lbl" data-i18n="amprInstalled">Use ampr-emu-ng for installed games</span>
-      <span class="hint" data-i18n="amprInstalledHint">Off: installed games run with the console's own AMPR.</span></span>
+      <span class="hint" data-i18n="amprInstalledHint">On: an installed debug FPKG starts through ampr-emu-ng from its app.pkg; a retail install gets ampr-emu-ng in its libraries. Off: the console's own AMPR. A game's sheet can override it.</span></span>
       <input type="checkbox" id="f_ampr_installed"></label>
     <label class="row"><span class="lbl" data-i18n="amprAutoUpdate">Auto-update ampr-emu-ng (checked once at start)</span><input type="checkbox" id="f_ampr_auto_update"></label>
     <div class="row"><span><span class="lbl" id="amprstatus">ampr-emu-ng</span><span class="hint" id="amprmsg"></span></span><button id="amprupdate" type="button" data-i18n="amprUpdateNow">Update ampr-emu-ng now</button></div>
@@ -1002,8 +1405,12 @@ button.primary { box-shadow: 0 0 0.8rem rgba(47, 224, 200, 0.35); }
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="m-name">
     <div class="sheet-side">
       <div class="sheet-pic" id="m-pic"></div>
-      <div class="btns">
-        <button class="primary" type="button" id="m-play" data-i18n="play">Play</button>
+      <div class="disc-card" id="m-disc" role="note" hidden>
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/><path d="M12 6.5a5.5 5.5 0 0 0-5.5 5.5" stroke-linecap="round"/></svg>
+        <div><b data-i18n="discTitle">Launch from the disc</b><p data-i18n="discText">Retail copy: it starts only with its disc in the console, from the home screen. Kraken Mount cannot launch it.</p></div>
+      </div>
+      <div class="btns" id="m-btns">
+        <button class="primary" type="button" id="m-play">Play</button>
         <button class="primary" type="button" id="m-install" hidden></button>
         <button type="button" id="m-rebuild" data-i18n="rebuildCache">Rebuild cache</button>
         <button type="button" id="m-report" data-i18n="report">Report</button>
@@ -1014,7 +1421,7 @@ button.primary { box-shadow: 0 0 0.8rem rgba(47, 224, 200, 0.35); }
     <div class="sheet-head">
       <div>
         <h2 id="m-name"></h2>
-        <p id="m-sub"></p>
+        <p><span id="m-sub"></span><span class="tag m-status" id="m-status"></span><span class="tag m-status" id="m-type"></span></p>
       </div>
       <button class="close" type="button" id="m-close" aria-label="Close" data-i18n-aria="close">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -1026,6 +1433,9 @@ button.primary { box-shadow: 0 0 0.8rem rgba(47, 224, 200, 0.35); }
       <label class="row m-row" id="m-playgo-row" hidden><span><span class="lbl" data-i18n="playgoStub">PlayGo stub</span>
         <span class="hint" data-i18n="playgoHint">Turn off if the game stays on a black screen; turn on if it asks to finish the download.</span></span>
         <input type="checkbox" id="m-playgo"></label>
+      <label class="row m-row" id="m-ng-row" hidden><span><span class="lbl" data-i18n="ngLbl">ampr-emu-ng</span>
+        <span class="hint" data-i18n="ngHint">On: the game runs through ampr-emu-ng (an installed debug FPKG starts from its app.pkg, without the console's license check). Off: the console's own AMPR.</span></span>
+        <input type="checkbox" id="m-ng"></label>
       <label class="row m-row" id="m-overlay-row" hidden><span><span class="lbl" data-i18n="overlayLbl">Kraken Mount libraries</span>
         <span class="hint" data-i18n="overlayHint">Turn off only for apps that bring their own system libraries (Playden titles): the game then runs without ampr-emu-ng and the bundled emulators.</span></span>
         <input type="checkbox" id="m-overlay"></label>
@@ -1051,6 +1461,14 @@ button.primary { box-shadow: 0 0 0.8rem rgba(47, 224, 200, 0.35); }
 </div>
 <script>
 'use strict';
+// AppCache serves the cached page first and fetches a newer one (another build) in the background:
+// show that one now, not only on the next open.
+// Not under an open game sheet or confirmation: it waits for them to close.
+function reloadWhenIdle() {
+  if (modalOpen() || !$('confirm').hidden) { setTimeout(reloadWhenIdle, 2000); return; }
+  location.reload();
+}
+if (window.applicationCache) window.applicationCache.addEventListener('updateready', reloadWhenIdle);
 // The focus highlight (html.kbd) shows only after a navigation key (arrows, Tab, Escape); a mouse click
 // or a tap hides it. Never on a PlayStation: its D-pad drives the browser's own cursor, not the focus,
 // so a clicked control would light up again on the next D-pad press.
@@ -1101,6 +1519,7 @@ var MSG = {
     noGames: 'No games found.', noGamesType: 'No games of this type.',
     search: 'Search games', noGamesMatch: 'No games match "{q}".', noGamesDrive: 'No games on this drive.',
     play: 'Play', launchFailed: 'Could not start the game: {error}',
+    closeGame: 'Close game', closeTitle: 'Close {name}?', closeText: 'The game closes as from the console\'s menu. Unsaved progress is lost.', closeFailed: 'Could not close the game: {error}',
     emptyCopy: 'Copy {pkg} files or game folders to {dir} (or {usb} on a USB drive), then press Rescan.',
     emptyHome: 'Each game shows up here and on the home screen once it is registered.',
     showLog: 'Show log', hideLog: 'Hide log',
@@ -1108,16 +1527,17 @@ var MSG = {
     updRunning: 'Updating to {v}... The page reloads once the new version runs.', updFailed: 'Update failed: {error}', updNoStart: 'Kraken Mount {v} did not start (see kraken.log)',
     // Game sheet
     delete: 'Delete', rebuildCache: 'Rebuild cache', close: 'Close', storage: 'Storage',
-    fTitleId: 'Title ID', fVersion: 'Version', fStatus: 'Status', fType: 'Type', fDrive: 'Drive',
+    fDrive: 'Drive',
     fPath: 'Path', fCachePath: 'Cache path', fCacheSize: 'Cache size', fCacheBuilt: 'Cache built',
     fCrash: 'Last crash', crashHint: 'The game crashed while running. That usually comes from the dump, ampr-emu-ng or the PlayGo stub, not the mount. Use Report when you open an issue.', report: 'Report',
     fBackport: 'Backport', yes: 'Yes', no: 'No', notBuilt: 'not built',
     playgoStub: 'PlayGo stub', playgoHint: 'Turn off if the game stays on a black screen; turn on if it asks to finish the download.',
     overlayLbl: 'Kraken Mount libraries', overlayHint: 'Turn off only for apps that bring their own system libraries (Playden titles): the game then runs without ampr-emu-ng and the bundled emulators.',
+    ngLbl: 'ampr-emu-ng', ngHint: 'On: the game runs through ampr-emu-ng (an installed debug FPKG starts from its app.pkg, without the console\'s license check). Off: the console\'s own AMPR.',
+    discTitle: 'Launch from the disc', discText: 'Retail copy: it starts only with its disc in the console, from the home screen. Kraken Mount cannot launch it.',
     szGame: 'Game', szDlc: 'DLC', szSave: 'Save', szCache: 'Cache',
     szPart: '{part} {size}', szNa: '{part} n/a', szTotal: 'Total {size}',
     sizesNone: 'Sizes unavailable', sizesLoading: 'Loading sizes...',
-    sizesDup: 'Duplicate copy: sizes are shown on the library copy.',
     // Dialogs
     cancel: 'Cancel',
     rebuildTitle: 'Rebuild the cache of {name}?',
@@ -1167,6 +1587,10 @@ var MSG = {
     driveStats: '{used} used · {free} free · {total} total', driveGames: '{n} games · {size}', driveNoGames: 'No games',
     showGames: 'Show games', noDrives: 'No drives found.',
     hiddenTab: 'Hidden', hide: 'Hide', unhide: 'Unhide', hdUnhideAll: 'Unhide all',
+    itRun: 'Running', itKept: 'Already installed', irunNone: 'Nothing is installing right now.', keptNone: 'No installed game has its .pkg in the scan folders.',
+    hdDelText: 'It is deleted from the drive: {path}. This cannot be undone.', hdDelFailed: 'Could not delete: {error}',
+    dupTab: 'Duplicates',
+    hideDupText: 'Kraken Mount stops listing this copy: {path}. The library copy stays; Unhide it from the Hidden screen.', delDupPkg: 'This .pkg file will be deleted from the drive: {path}. The library copy and its cache stay. This cannot be undone.', delDupFolder: 'This game folder will be deleted from the drive: {path}. The library copy and its cache stay. This cannot be undone.',
     hdHint: 'Hidden games are off the home screen and out of the library. Their files stay on the drive; Unhide brings a game back with the next scan.',
     hdNone: 'No hidden games. Hide one from its game sheet.',
     hdAllTitle: 'Unhide all games?', hdAllText: '{n} hidden entries go back into the scan, including folders excluded by hand in config.toml. Their games return to the home screen.',
@@ -1196,14 +1620,13 @@ var MSG = {
     idelHint: 'Only once the console reports the install done.',
     idelFree: 'Internal SSD: {free} free.',
     idelSame: 'Same switch as on the Install screen.',
-    gKept: 'Installed, .pkg still here',
     keptHint: 'These are installed. Deleting the .pkg frees the drive and keeps the game.',
     installedWord: 'installed',
     delPkg: 'Delete .pkg',
     keptDelTitle: 'Delete the .pkg of {name}?',
     keptDelText: 'The file {path} is deleted from the drive. The installed game stays. This cannot be undone.',
     amprInstalled: 'Use ampr-emu-ng for installed games',
-    amprInstalledHint: 'Off: installed games run with the console\'s own AMPR.',
+    amprInstalledHint: 'On: an installed debug FPKG starts through ampr-emu-ng from its app.pkg; a retail install gets ampr-emu-ng in its libraries. Off: the console\'s own AMPR. A game\'s sheet can override it.',
     kindInstalled: 'Installed',
     badgeInstalled: 'INSTALLED',
     badgeRetail: 'RETAIL',
@@ -1231,8 +1654,6 @@ var MSG = {
     fInstalledOn: 'Installed on',
     fAlsoFound: 'Also found',
     alsoFoundWhy: '(not mounted: installed copy wins)',
-    noteRetail: 'Retail install. Kraken Mount adds its libraries at launch; uninstall it from the console menu.',
-    noteFpkg: 'Installed from an FPKG. Kraken Mount adds its libraries at launch; uninstall it from the console menu.'
   },
   ru: {
     screens: 'Разделы', library: 'Библиотека', settings: 'Настройки',
@@ -1261,22 +1682,24 @@ var MSG = {
     noGames: 'Игры не найдены.', noGamesType: 'Нет игр этого типа.',
     search: 'Поиск игр', noGamesMatch: 'Нет игр по запросу «{q}».', noGamesDrive: 'На этом диске нет игр.',
     play: 'Играть', launchFailed: 'Не удалось запустить игру: {error}',
+    closeGame: 'Закрыть игру', closeTitle: 'Закрыть {name}?', closeText: 'Игра закроется так же, как из меню консоли. Несохранённый прогресс будет потерян.', closeFailed: 'Не удалось закрыть игру: {error}',
     emptyCopy: 'Скопируйте файлы {pkg} или папки игр в {dir} (или в {usb} на USB-накопителе), затем нажмите «Пересканировать».',
     emptyHome: 'Каждая игра появится здесь и на главном экране после регистрации.',
     showLog: 'Показать журнал', hideLog: 'Скрыть журнал',
     updAvail: 'Доступна версия Kraken Mount {v}.', updNow: 'Обновить', updLater: 'Позже', updRetry: 'Повторить',
     updRunning: 'Обновление до {v}... Страница перезагрузится, когда новая версия запустится.', updFailed: 'Не удалось обновить: {error}', updNoStart: 'Kraken Mount {v} не запустился (см. kraken.log)',
     delete: 'Удалить', rebuildCache: 'Пересобрать кеш', close: 'Закрыть', storage: 'Хранилище',
-    fTitleId: 'Title ID', fVersion: 'Версия', fStatus: 'Статус', fType: 'Тип', fDrive: 'Накопитель',
+    fDrive: 'Накопитель',
     fPath: 'Путь', fCachePath: 'Путь кеша', fCacheSize: 'Размер кеша', fCacheBuilt: 'Кеш собран',
     fCrash: 'Последний сбой', crashHint: 'Игра упала во время работы. Обычно причина в дампе, ampr-emu-ng или заглушке PlayGo, а не в монтировании. Нажмите «Отчёт», когда создаёте issue.', report: 'Отчёт',
     fBackport: 'Бэкпорт', yes: 'Да', no: 'Нет', notBuilt: 'не собран',
     playgoStub: 'Заглушка PlayGo', playgoHint: 'Выключите, если игра остаётся на чёрном экране; включите, если она просит завершить загрузку.',
     overlayLbl: 'Библиотеки Kraken Mount', overlayHint: 'Выключайте только для приложений со своими системными библиотеками (тайтлы Playden): тогда игра запускается без ampr-emu-ng и встроенных эмуляторов.',
+    ngLbl: 'ampr-emu-ng', ngHint: 'Вкл.: игра запускается через ampr-emu-ng (установленный debug FPKG стартует из своего app.pkg, без проверки лицензии консоли). Выкл.: собственный AMPR консоли.',
+    discTitle: 'Запуск с диска', discText: 'Розничная копия: запускается только с диском в консоли, с главного экрана. Kraken Mount не может её запустить.',
     szGame: 'Игра', szDlc: 'DLC', szSave: 'Сохранения', szCache: 'Кеш',
     szPart: '{part} {size}', szNa: '{part} н/д', szTotal: 'Всего {size}',
     sizesNone: 'Размеры недоступны', sizesLoading: 'Загрузка размеров...',
-    sizesDup: 'Дубликат: размеры показаны у копии в библиотеке.',
     cancel: 'Отмена',
     rebuildTitle: 'Пересобрать кеш {name}?',
     rebuildText: 'Кеш будет собран заново. Пока сборка не закончится, игра недоступна.',
@@ -1324,6 +1747,10 @@ var MSG = {
     driveStats: 'занято {used} · свободно {free} · всего {total}', driveGames: 'Игр: {n} · {size}', driveNoGames: 'Нет игр',
     showGames: 'Показать игры', noDrives: 'Накопители не найдены.',
     hiddenTab: 'Скрытые', hide: 'Скрыть', unhide: 'Вернуть', hdUnhideAll: 'Вернуть все',
+    itRun: 'Выполняется', itKept: 'Уже установлено', irunNone: 'Сейчас ничего не устанавливается.', keptNone: 'Ни у одной установленной игры нет .pkg в папках сканирования.',
+    hdDelText: 'Будет удалено с диска: {path}. Это нельзя отменить.', hdDelFailed: 'Не удалось удалить: {error}',
+    dupTab: 'Дубликаты',
+    hideDupText: 'Kraken Mount перестанет показывать эту копию: {path}. Копия из библиотеки останется; вернуть её можно на экране «Скрытые».', delDupPkg: 'Файл .pkg будет удалён с диска: {path}. Копия из библиотеки и её кеш останутся. Это нельзя отменить.', delDupFolder: 'Папка игры будет удалена с диска: {path}. Копия из библиотеки и её кеш останутся. Это нельзя отменить.',
     hdHint: 'Скрытые игры убраны с главного экрана и из библиотеки. Их файлы остаются на накопителе; «Вернуть» вернёт игру при следующем сканировании.',
     hdNone: 'Скрытых игр нет. Скрыть игру можно в её карточке.',
     hdAllTitle: 'Вернуть все игры?', hdAllText: 'Скрытые записи ({n}) снова попадут в сканирование, включая папки, исключённые вручную в config.toml. Их игры вернутся на главный экран.',
@@ -1353,14 +1780,13 @@ var MSG = {
     idelHint: 'Только когда консоль сообщит, что установка завершена.',
     idelFree: 'Внутренний SSD: свободно {free}.',
     idelSame: 'Тот же переключатель, что на экране Установка.',
-    gKept: 'Установлено, .pkg ещё здесь',
     keptHint: 'Эти пакеты установлены. Удаление .pkg освобождает диск, игра остаётся.',
     installedWord: 'установлено',
     delPkg: 'Удалить .pkg',
     keptDelTitle: 'Удалить .pkg игры {name}?',
     keptDelText: 'Файл {path} будет удалён с диска. Установленная игра останется. Это нельзя отменить.',
     amprInstalled: 'Использовать ampr-emu-ng для установленных игр',
-    amprInstalledHint: 'Выкл.: установленные игры работают с собственным AMPR консоли.',
+    amprInstalledHint: 'Вкл.: установленный debug FPKG запускается через ampr-emu-ng из своего app.pkg; розничная установка получает ampr-emu-ng в библиотеки. Выкл.: собственный AMPR консоли. Можно переопределить в карточке игры.',
     kindInstalled: 'Установленные',
     badgeInstalled: 'УСТАНОВЛЕНА',
     badgeRetail: 'RETAIL',
@@ -1388,8 +1814,6 @@ var MSG = {
     fInstalledOn: 'Установлена на',
     fAlsoFound: 'Также найдено',
     alsoFoundWhy: '(не смонтировано: приоритет у установленной копии)',
-    noteRetail: 'Retail-установка. Kraken Mount добавляет свои библиотеки при запуске; удаляйте игру через меню консоли.',
-    noteFpkg: 'Установлена из FPKG. Kraken Mount добавляет свои библиотеки при запуске; удаляйте игру через меню консоли.'
   },
   zh: {
     screens: '页面', library: '游戏库', settings: '设置',
@@ -1418,22 +1842,24 @@ var MSG = {
     noGames: '未找到游戏。', noGamesType: '没有此类型的游戏。',
     search: '搜索游戏', noGamesMatch: '没有与“{q}”匹配的游戏。', noGamesDrive: '此驱动器上没有游戏。',
     play: '开始游戏', launchFailed: '无法启动游戏：{error}',
+    closeGame: '关闭游戏', closeTitle: '关闭 {name}？', closeText: '游戏将像从主机菜单中关闭一样关闭。未保存的进度将丢失。', closeFailed: '无法关闭游戏：{error}',
     emptyCopy: '将 {pkg} 文件或游戏文件夹复制到 {dir}（或 USB 驱动器上的 {usb}），然后按“重新扫描”。',
     emptyHome: '每个游戏注册后都会显示在这里和主屏幕上。',
     showLog: '显示日志', hideLog: '隐藏日志',
     updAvail: 'Kraken Mount {v} 已发布。', updNow: '更新', updLater: '稍后', updRetry: '重试',
     updRunning: '正在更新到 {v}... 新版本运行后页面会重新加载。', updFailed: '更新失败：{error}', updNoStart: 'Kraken Mount {v} 未能启动（见 kraken.log）',
     delete: '删除', rebuildCache: '重建缓存', close: '关闭', storage: '存储',
-    fTitleId: 'Title ID', fVersion: '版本', fStatus: '状态', fType: '类型', fDrive: '驱动器',
+    fDrive: '驱动器',
     fPath: '路径', fCachePath: '缓存路径', fCacheSize: '缓存大小', fCacheBuilt: '缓存构建时间',
     fCrash: '上次崩溃', crashHint: '游戏在运行时崩溃。原因通常是 dump、ampr-emu-ng 或 PlayGo 存根，而不是挂载。提交 issue 时请使用“报告”。', report: '报告',
     fBackport: '向下移植', yes: '是', no: '否', notBuilt: '未构建',
     playgoStub: 'PlayGo 存根', playgoHint: '如果游戏停留在黑屏，请关闭；如果游戏要求完成下载，请开启。',
     overlayLbl: 'Kraken Mount 库', overlayHint: '仅对自带系统库的应用（Playden 游戏）关闭：关闭后游戏将在没有 ampr-emu-ng 和内置模拟器的情况下运行。',
+    ngLbl: 'ampr-emu-ng', ngHint: '开启：游戏通过 ampr-emu-ng 运行（已安装的调试 FPKG 从其 app.pkg 启动，不经过主机的许可证检查）。关闭：使用主机自带的 AMPR。',
+    discTitle: '从光盘启动', discText: '零售版副本：只能在主机中放入光盘后从主屏幕启动。Kraken Mount 无法启动它。',
     szGame: '游戏', szDlc: 'DLC', szSave: '存档', szCache: '缓存',
     szPart: '{part} {size}', szNa: '{part} 不可用', szTotal: '总计 {size}',
     sizesNone: '大小不可用', sizesLoading: '正在加载大小...',
-    sizesDup: '重复副本：大小显示在游戏库中的副本上。',
     cancel: '取消',
     rebuildTitle: '重建 {name} 的缓存？',
     rebuildText: '缓存将重新构建。完成前游戏不可用。',
@@ -1481,6 +1907,10 @@ var MSG = {
     driveStats: '已用 {used} · 可用 {free} · 共 {total}', driveGames: '{n} 个游戏 · {size}', driveNoGames: '没有游戏',
     showGames: '显示游戏', noDrives: '未找到驱动器。',
     hiddenTab: '已隐藏', hide: '隐藏', unhide: '取消隐藏', hdUnhideAll: '全部取消隐藏',
+    itRun: '进行中', itKept: '已安装', irunNone: '当前没有正在安装的内容。', keptNone: '扫描文件夹中没有已安装游戏的 .pkg。',
+    hdDelText: '将从驱动器删除：{path}。此操作无法撤消。', hdDelFailed: '无法删除：{error}',
+    dupTab: '重复项',
+    hideDupText: 'Kraken Mount 将不再列出此副本：{path}。游戏库中的副本保留；可在“已隐藏”页面中取消隐藏。', delDupPkg: '将从驱动器删除此 .pkg 文件：{path}。游戏库中的副本及其缓存保留。此操作无法撤消。', delDupFolder: '将从驱动器删除此游戏文件夹：{path}。游戏库中的副本及其缓存保留。此操作无法撤消。',
     hdHint: '已隐藏的游戏不会出现在主屏幕和游戏库中。其文件仍保留在驱动器上；取消隐藏后，游戏会在下次扫描时回来。',
     hdNone: '没有已隐藏的游戏。可在游戏详情中隐藏游戏。',
     hdAllTitle: '取消隐藏所有游戏？', hdAllText: '{n} 个已隐藏的条目将重新参与扫描，包括在 config.toml 中手动排除的文件夹。这些游戏会回到主屏幕。',
@@ -1510,14 +1940,13 @@ var MSG = {
     idelHint: '仅在主机报告安装完成之后。',
     idelFree: '内置 SSD：可用 {free}。',
     idelSame: '与安装页面上的开关相同。',
-    gKept: '已安装，.pkg 仍在',
     keptHint: '这些已经安装。删除 .pkg 可释放磁盘空间，游戏保留。',
     installedWord: '已安装',
     delPkg: '删除 .pkg',
     keptDelTitle: '删除 {name} 的 .pkg？',
     keptDelText: '文件 {path} 将从磁盘删除。已安装的游戏保留。此操作无法撤销。',
     amprInstalled: '对已安装的游戏使用 ampr-emu-ng',
-    amprInstalledHint: '关闭：已安装的游戏使用主机自带的 AMPR 运行。',
+    amprInstalledHint: '开启：已安装的调试 FPKG 通过 ampr-emu-ng 从其 app.pkg 启动；零售版安装会在库中加入 ampr-emu-ng。关闭：使用主机自带的 AMPR。可在游戏详情中单独设置。',
     kindInstalled: '已安装',
     badgeInstalled: '已安装',
     badgeRetail: '正版',
@@ -1545,8 +1974,6 @@ var MSG = {
     fInstalledOn: '安装位置',
     fAlsoFound: '另外找到',
     alsoFoundWhy: '（未挂载：已安装的副本优先）',
-    noteRetail: '正版安装。Kraken Mount 在启动时添加其库；请从主机菜单卸载。',
-    noteFpkg: '从 FPKG 安装。Kraken Mount 在启动时添加其库；请从主机菜单卸载。'
   },
   de: {
     screens: 'Bereiche', library: 'Bibliothek', settings: 'Einstellungen',
@@ -1575,22 +2002,24 @@ var MSG = {
     noGames: 'Keine Spiele gefunden.', noGamesType: 'Keine Spiele dieses Typs.',
     search: 'Spiele suchen', noGamesMatch: 'Keine Spiele zu „{q}“.', noGamesDrive: 'Keine Spiele auf diesem Laufwerk.',
     play: 'Spielen', launchFailed: 'Spiel konnte nicht gestartet werden: {error}',
+    closeGame: 'Spiel schließen', closeTitle: '{name} schließen?', closeText: 'Das Spiel wird wie über das Konsolenmenü geschlossen. Nicht gespeicherter Fortschritt geht verloren.', closeFailed: 'Spiel konnte nicht geschlossen werden: {error}',
     emptyCopy: 'Kopieren Sie {pkg}-Dateien oder Spielordner nach {dir} (oder {usb} auf einem USB-Laufwerk) und drücken Sie dann „Neu scannen“.',
     emptyHome: 'Jedes Spiel erscheint hier und auf dem Startbildschirm, sobald es registriert ist.',
     showLog: 'Protokoll anzeigen', hideLog: 'Protokoll ausblenden',
     updAvail: 'Kraken Mount {v} ist verfügbar.', updNow: 'Aktualisieren', updLater: 'Später', updRetry: 'Erneut versuchen',
     updRunning: 'Aktualisierung auf {v}... Die Seite lädt neu, sobald die neue Version läuft.', updFailed: 'Aktualisierung fehlgeschlagen: {error}', updNoStart: 'Kraken Mount {v} ist nicht gestartet (siehe kraken.log)',
     delete: 'Löschen', rebuildCache: 'Cache neu erstellen', close: 'Schließen', storage: 'Speicher',
-    fTitleId: 'Title ID', fVersion: 'Version', fStatus: 'Status', fType: 'Typ', fDrive: 'Laufwerk',
+    fDrive: 'Laufwerk',
     fPath: 'Pfad', fCachePath: 'Cache-Pfad', fCacheSize: 'Cache-Größe', fCacheBuilt: 'Cache erstellt',
     fCrash: 'Letzter Absturz', crashHint: 'Das Spiel ist während des Spielens abgestürzt. Meist liegt es am Dump, an ampr-emu-ng oder am PlayGo-Stub, nicht am Einbinden. Nutze „Bericht“, wenn du ein Issue eröffnest.', report: 'Bericht',
     fBackport: 'Backport', yes: 'Ja', no: 'Nein', notBuilt: 'nicht erstellt',
     playgoStub: 'PlayGo-Stub', playgoHint: 'Ausschalten, wenn das Spiel auf einem schwarzen Bildschirm bleibt; einschalten, wenn es verlangt, den Download abzuschließen.',
     overlayLbl: 'Kraken Mount-Bibliotheken', overlayHint: 'Nur für Apps ausschalten, die eigene Systembibliotheken mitbringen (Playden-Titel): Das Spiel läuft dann ohne ampr-emu-ng und die mitgelieferten Emulatoren.',
+    ngLbl: 'ampr-emu-ng', ngHint: 'An: Das Spiel läuft über ampr-emu-ng (eine installierte Debug-FPKG startet aus ihrer app.pkg, ohne die Lizenzprüfung der Konsole). Aus: das AMPR der Konsole.',
+    discTitle: 'Von der Disc starten', discText: 'Retail-Kopie: Sie startet nur mit eingelegter Disc vom Startbildschirm. Kraken Mount kann sie nicht starten.',
     szGame: 'Spiel', szDlc: 'DLC', szSave: 'Spielstand', szCache: 'Cache',
     szPart: '{part} {size}', szNa: '{part} k. A.', szTotal: 'Gesamt {size}',
     sizesNone: 'Größen nicht verfügbar', sizesLoading: 'Größen werden geladen...',
-    sizesDup: 'Doppelte Kopie: Die Größen stehen bei der Kopie in der Bibliothek.',
     cancel: 'Abbrechen',
     rebuildTitle: 'Cache von {name} neu erstellen?',
     rebuildText: 'Der Cache wird neu erstellt. Bis dahin ist das Spiel nicht verfügbar.',
@@ -1638,6 +2067,10 @@ var MSG = {
     driveStats: '{used} belegt · {free} frei · {total} gesamt', driveGames: '{n} Spiele · {size}', driveNoGames: 'Keine Spiele',
     showGames: 'Spiele anzeigen', noDrives: 'Keine Laufwerke gefunden.',
     hiddenTab: 'Ausgeblendet', hide: 'Ausblenden', unhide: 'Einblenden', hdUnhideAll: 'Alle einblenden',
+    itRun: 'Läuft', itKept: 'Bereits installiert', irunNone: 'Gerade wird nichts installiert.', keptNone: 'Kein installiertes Spiel hat seine .pkg in den Scan-Ordnern.',
+    hdDelText: 'Wird vom Laufwerk gelöscht: {path}. Das lässt sich nicht rückgängig machen.', hdDelFailed: 'Löschen fehlgeschlagen: {error}',
+    dupTab: 'Duplikate',
+    hideDupText: 'Kraken Mount listet diese Kopie nicht mehr: {path}. Die Kopie aus der Bibliothek bleibt; einblenden über den Bildschirm „Ausgeblendet“.', delDupPkg: 'Diese .pkg-Datei wird vom Laufwerk gelöscht: {path}. Die Kopie aus der Bibliothek und ihr Cache bleiben. Das lässt sich nicht rückgängig machen.', delDupFolder: 'Dieser Spielordner wird vom Laufwerk gelöscht: {path}. Die Kopie aus der Bibliothek und ihr Cache bleiben. Das lässt sich nicht rückgängig machen.',
     hdHint: 'Ausgeblendete Spiele sind nicht auf dem Startbildschirm und nicht in der Bibliothek. Ihre Dateien bleiben auf dem Laufwerk; Einblenden holt ein Spiel beim nächsten Scan zurück.',
     hdNone: 'Keine ausgeblendeten Spiele. Blenden Sie ein Spiel in seiner Detailansicht aus.',
     hdAllTitle: 'Alle Spiele einblenden?', hdAllText: '{n} ausgeblendete Einträge kommen wieder in den Scan, auch von Hand in config.toml ausgeschlossene Ordner. Ihre Spiele erscheinen wieder auf dem Startbildschirm.',
@@ -1667,14 +2100,13 @@ var MSG = {
     idelHint: 'Erst wenn die Konsole die Installation als fertig meldet.',
     idelFree: 'Interne SSD: {free} frei.',
     idelSame: 'Derselbe Schalter wie auf dem Bildschirm Installieren.',
-    gKept: 'Installiert, .pkg noch vorhanden',
     keptHint: 'Diese sind installiert. Das Löschen der .pkg macht das Laufwerk frei, das Spiel bleibt.',
     installedWord: 'installiert',
     delPkg: '.pkg löschen',
     keptDelTitle: '.pkg von {name} löschen?',
     keptDelText: 'Die Datei {path} wird vom Laufwerk gelöscht. Das installierte Spiel bleibt. Das lässt sich nicht rückgängig machen.',
     amprInstalled: 'ampr-emu-ng für installierte Spiele verwenden',
-    amprInstalledHint: 'Aus: installierte Spiele laufen mit dem AMPR der Konsole.',
+    amprInstalledHint: 'An: Eine installierte Debug-FPKG startet über ampr-emu-ng aus ihrer app.pkg; eine Retail-Installation bekommt ampr-emu-ng in ihre Bibliotheken. Aus: das AMPR der Konsole. Pro Spiel im Spielblatt änderbar.',
     kindInstalled: 'Installiert',
     badgeInstalled: 'INSTALLIERT',
     badgeRetail: 'RETAIL',
@@ -1702,8 +2134,6 @@ var MSG = {
     fInstalledOn: 'Installiert auf',
     fAlsoFound: 'Auch gefunden',
     alsoFoundWhy: '(nicht eingehängt: die installierte Kopie hat Vorrang)',
-    noteRetail: 'Retail-Installation. Kraken Mount fügt beim Start seine Bibliotheken hinzu; deinstallieren Sie das Spiel über das Konsolenmenü.',
-    noteFpkg: 'Aus einem FPKG installiert. Kraken Mount fügt beim Start seine Bibliotheken hinzu; deinstallieren Sie das Spiel über das Konsolenmenü.'
   },
   es: {
     screens: 'Pantallas', library: 'Biblioteca', settings: 'Ajustes',
@@ -1732,22 +2162,24 @@ var MSG = {
     noGames: 'No se encontraron juegos.', noGamesType: 'No hay juegos de este tipo.',
     search: 'Buscar juegos', noGamesMatch: 'Ningún juego coincide con «{q}».', noGamesDrive: 'No hay juegos en esta unidad.',
     play: 'Jugar', launchFailed: 'No se pudo iniciar el juego: {error}',
+    closeGame: 'Cerrar juego', closeTitle: '¿Cerrar {name}?', closeText: 'El juego se cierra como desde el menú de la consola. Se pierde el progreso no guardado.', closeFailed: 'No se pudo cerrar el juego: {error}',
     emptyCopy: 'Copia archivos {pkg} o carpetas de juegos en {dir} (o en {usb} en una unidad USB) y pulsa Volver a escanear.',
     emptyHome: 'Cada juego aparece aquí y en la pantalla de inicio cuando se registra.',
     showLog: 'Mostrar registro', hideLog: 'Ocultar registro',
     updAvail: 'Kraken Mount {v} está disponible.', updNow: 'Actualizar', updLater: 'Más tarde', updRetry: 'Reintentar',
     updRunning: 'Actualizando a {v}... La página se recarga cuando la nueva versión esté en marcha.', updFailed: 'Error al actualizar: {error}', updNoStart: 'Kraken Mount {v} no se inició (consulta kraken.log)',
     delete: 'Eliminar', rebuildCache: 'Recrear caché', close: 'Cerrar', storage: 'Almacenamiento',
-    fTitleId: 'Title ID', fVersion: 'Versión', fStatus: 'Estado', fType: 'Tipo', fDrive: 'Unidad',
+    fDrive: 'Unidad',
     fPath: 'Ruta', fCachePath: 'Ruta de caché', fCacheSize: 'Tamaño de caché', fCacheBuilt: 'Caché creada',
     fCrash: 'Último cierre inesperado', crashHint: 'El juego falló mientras se ejecutaba. Suele deberse al dump, a ampr-emu-ng o al stub de PlayGo, no al montaje. Usa Informe al abrir un issue.', report: 'Informe',
     fBackport: 'Backport', yes: 'Sí', no: 'No', notBuilt: 'sin crear',
     playgoStub: 'Stub de PlayGo', playgoHint: 'Desactívalo si el juego se queda en pantalla negra; actívalo si pide terminar la descarga.',
     overlayLbl: 'Bibliotecas de Kraken Mount', overlayHint: 'Desactívalo solo para apps que traen sus propias bibliotecas del sistema (títulos de Playden): el juego se ejecuta entonces sin ampr-emu-ng ni los emuladores incluidos.',
+    ngLbl: 'ampr-emu-ng', ngHint: 'Activado: el juego se ejecuta con ampr-emu-ng (un FPKG de depuración instalado arranca desde su app.pkg, sin la comprobación de licencia de la consola). Desactivado: el AMPR de la propia consola.',
+    discTitle: 'Inicia desde el disco', discText: 'Copia retail: solo arranca con su disco en la consola, desde la pantalla de inicio. Kraken Mount no puede iniciarla.',
     szGame: 'Juego', szDlc: 'DLC', szSave: 'Partidas', szCache: 'Caché',
     szPart: '{part} {size}', szNa: '{part} n/d', szTotal: 'Total {size}',
     sizesNone: 'Tamaños no disponibles', sizesLoading: 'Cargando tamaños...',
-    sizesDup: 'Copia duplicada: los tamaños se muestran en la copia de la biblioteca.',
     cancel: 'Cancelar',
     rebuildTitle: '¿Recrear la caché de {name}?',
     rebuildText: 'La caché se creará de nuevo. El juego no estará disponible hasta que termine.',
@@ -1795,6 +2227,10 @@ var MSG = {
     driveStats: '{used} usado · {free} libre · {total} en total', driveGames: '{n} juegos · {size}', driveNoGames: 'Sin juegos',
     showGames: 'Mostrar juegos', noDrives: 'No se encontraron unidades.',
     hiddenTab: 'Ocultos', hide: 'Ocultar', unhide: 'Mostrar', hdUnhideAll: 'Mostrar todos',
+    itRun: 'En curso', itKept: 'Ya instalado', irunNone: 'No se está instalando nada ahora.', keptNone: 'Ningún juego instalado tiene su .pkg en las carpetas de escaneo.',
+    hdDelText: 'Se eliminará de la unidad: {path}. No se puede deshacer.', hdDelFailed: 'No se pudo eliminar: {error}',
+    dupTab: 'Duplicados',
+    hideDupText: 'Kraken Mount dejará de mostrar esta copia: {path}. La copia de la biblioteca se queda; muéstrala de nuevo desde la pantalla Ocultos.', delDupPkg: 'Este archivo .pkg se eliminará de la unidad: {path}. La copia de la biblioteca y su caché se quedan. No se puede deshacer.', delDupFolder: 'Esta carpeta del juego se eliminará de la unidad: {path}. La copia de la biblioteca y su caché se quedan. No se puede deshacer.',
     hdHint: 'Los juegos ocultos no aparecen en la pantalla de inicio ni en la biblioteca. Sus archivos siguen en la unidad; Mostrar devuelve el juego en el siguiente escaneo.',
     hdNone: 'No hay juegos ocultos. Oculta uno desde su ficha.',
     hdAllTitle: '¿Mostrar todos los juegos?', hdAllText: '{n} entradas ocultas vuelven al escaneo, incluidas las carpetas excluidas a mano en config.toml. Sus juegos vuelven a la pantalla de inicio.',
@@ -1824,14 +2260,13 @@ var MSG = {
     idelHint: 'Solo cuando la consola indique que la instalación terminó.',
     idelFree: 'SSD interno: {free} libres.',
     idelSame: 'El mismo interruptor que en la pantalla Instalar.',
-    gKept: 'Instalado, el .pkg sigue aquí',
     keptHint: 'Ya están instalados. Borrar el .pkg libera la unidad y conserva el juego.',
     installedWord: 'instalado',
     delPkg: 'Borrar .pkg',
     keptDelTitle: '¿Borrar el .pkg de {name}?',
     keptDelText: 'El archivo {path} se borra de la unidad. El juego instalado se conserva. No se puede deshacer.',
     amprInstalled: 'Usar ampr-emu-ng en los juegos instalados',
-    amprInstalledHint: 'Desactivado: los juegos instalados usan el AMPR de la propia consola.',
+    amprInstalledHint: 'Activado: un FPKG de depuración instalado arranca con ampr-emu-ng desde su app.pkg; una instalación retail recibe ampr-emu-ng en sus bibliotecas. Desactivado: el AMPR de la consola. Cada juego puede cambiarlo en su ficha.',
     kindInstalled: 'Instalados',
     badgeInstalled: 'INSTALADO',
     badgeRetail: 'RETAIL',
@@ -1859,8 +2294,6 @@ var MSG = {
     fInstalledOn: 'Instalado en',
     fAlsoFound: 'También encontrado',
     alsoFoundWhy: '(sin montar: gana la copia instalada)',
-    noteRetail: 'Instalación retail. Kraken Mount añade sus bibliotecas al iniciar; desinstálalo desde el menú de la consola.',
-    noteFpkg: 'Instalado desde un FPKG. Kraken Mount añade sus bibliotecas al iniciar; desinstálalo desde el menú de la consola.'
   },
   fr: {
     screens: 'Écrans', library: 'Bibliothèque', settings: 'Paramètres',
@@ -1889,22 +2322,24 @@ var MSG = {
     noGames: 'Aucun jeu trouvé.', noGamesType: 'Aucun jeu de ce type.',
     search: 'Rechercher des jeux', noGamesMatch: 'Aucun jeu ne correspond à « {q} ».', noGamesDrive: 'Aucun jeu sur ce disque.',
     play: 'Jouer', launchFailed: 'Impossible de lancer le jeu : {error}',
+    closeGame: 'Fermer le jeu', closeTitle: 'Fermer {name} ?', closeText: 'Le jeu se ferme comme depuis le menu de la console. La progression non sauvegardée est perdue.', closeFailed: 'Impossible de fermer le jeu : {error}',
     emptyCopy: 'Copiez des fichiers {pkg} ou des dossiers de jeux dans {dir} (ou {usb} sur une clé USB), puis appuyez sur Réanalyser.',
     emptyHome: "Chaque jeu apparaît ici et sur l'écran d'accueil une fois enregistré.",
     showLog: 'Afficher le journal', hideLog: 'Masquer le journal',
     updAvail: 'Kraken Mount {v} est disponible.', updNow: 'Mettre à jour', updLater: 'Plus tard', updRetry: 'Réessayer',
     updRunning: 'Mise à jour vers {v}... La page se recharge dès que la nouvelle version tourne.', updFailed: 'Échec de la mise à jour : {error}', updNoStart: 'Kraken Mount {v} n\'a pas démarré (voir kraken.log)',
     delete: 'Supprimer', rebuildCache: 'Recréer le cache', close: 'Fermer', storage: 'Stockage',
-    fTitleId: 'Title ID', fVersion: 'Version', fStatus: 'État', fType: 'Type', fDrive: 'Disque',
+    fDrive: 'Disque',
     fPath: 'Chemin', fCachePath: 'Chemin du cache', fCacheSize: 'Taille du cache', fCacheBuilt: 'Cache créé',
     fCrash: 'Dernier plantage', crashHint: 'Le jeu a planté pendant l\'exécution. La cause est souvent le dump, ampr-emu-ng ou le stub PlayGo, pas le montage. Utilisez Rapport pour ouvrir une issue.', report: 'Rapport',
     fBackport: 'Backport', yes: 'Oui', no: 'Non', notBuilt: 'non créé',
     playgoStub: 'Stub PlayGo', playgoHint: "Désactivez-le si le jeu reste sur un écran noir ; activez-le s'il demande de terminer le téléchargement.",
     overlayLbl: 'Bibliothèques Kraken Mount', overlayHint: "Désactivez-les uniquement pour les apps qui apportent leurs propres bibliothèques système (titres Playden) : le jeu tourne alors sans ampr-emu-ng ni les émulateurs fournis.",
+    ngLbl: 'ampr-emu-ng', ngHint: 'Activé : le jeu passe par ampr-emu-ng (un FPKG de débogage installé démarre depuis son app.pkg, sans la vérification de licence de la console). Désactivé : l\'AMPR de la console.',
+    discTitle: 'Lancer depuis le disque', discText: 'Copie retail : elle ne démarre qu\'avec son disque dans la console, depuis l\'écran d\'accueil. Kraken Mount ne peut pas la lancer.',
     szGame: 'Jeu', szDlc: 'DLC', szSave: 'Sauvegarde', szCache: 'Cache',
     szPart: '{part} {size}', szNa: '{part} n/d', szTotal: 'Total {size}',
     sizesNone: 'Tailles indisponibles', sizesLoading: 'Chargement des tailles...',
-    sizesDup: 'Copie en double : les tailles sont affichées sur la copie de la bibliothèque.',
     cancel: 'Annuler',
     rebuildTitle: 'Recréer le cache de {name} ?',
     rebuildText: "Le cache sera recréé. Le jeu est indisponible jusqu'à la fin.",
@@ -1952,6 +2387,10 @@ var MSG = {
     driveStats: '{used} utilisés · {free} libres · {total} au total', driveGames: '{n} jeux · {size}', driveNoGames: 'Aucun jeu',
     showGames: 'Afficher les jeux', noDrives: 'Aucun disque trouvé.',
     hiddenTab: 'Masqués', hide: 'Masquer', unhide: 'Réafficher', hdUnhideAll: 'Tout réafficher',
+    itRun: 'En cours', itKept: 'Déjà installé', irunNone: 'Rien n\'est en cours d\'installation.', keptNone: 'Aucun jeu installé n\'a son .pkg dans les dossiers analysés.',
+    hdDelText: 'Sera supprimé du disque : {path}. Action irréversible.', hdDelFailed: 'Suppression impossible : {error}',
+    dupTab: 'Doublons',
+    hideDupText: 'Kraken Mount n\'affichera plus cette copie : {path}. La copie de la bibliothèque reste ; réaffichez-la depuis l\'écran Masqués.', delDupPkg: 'Ce fichier .pkg sera supprimé du disque : {path}. La copie de la bibliothèque et son cache restent. Action irréversible.', delDupFolder: 'Ce dossier de jeu sera supprimé du disque : {path}. La copie de la bibliothèque et son cache restent. Action irréversible.',
     hdHint: 'Les jeux masqués quittent l\'écran d\'accueil et la bibliothèque. Leurs fichiers restent sur le disque ; Réafficher ramène un jeu à la prochaine analyse.',
     hdNone: 'Aucun jeu masqué. Masquez-en un depuis sa fiche.',
     hdAllTitle: 'Réafficher tous les jeux ?', hdAllText: '{n} entrées masquées reviennent dans l\'analyse, y compris les dossiers exclus à la main dans config.toml. Leurs jeux reviennent sur l\'écran d\'accueil.',
@@ -1981,14 +2420,13 @@ var MSG = {
     idelHint: 'Seulement quand la console signale l\'installation terminée.',
     idelFree: 'SSD interne : {free} libres.',
     idelSame: 'Le même interrupteur que sur l\'écran Installer.',
-    gKept: 'Installé, .pkg toujours présent',
     keptHint: 'Ils sont installés. Supprimer le .pkg libère le disque et garde le jeu.',
     installedWord: 'installé',
     delPkg: 'Supprimer le .pkg',
     keptDelTitle: 'Supprimer le .pkg de {name} ?',
     keptDelText: 'Le fichier {path} est supprimé du disque. Le jeu installé reste. Action irréversible.',
     amprInstalled: 'Utiliser ampr-emu-ng pour les jeux installés',
-    amprInstalledHint: 'Désactivé : les jeux installés utilisent l\'AMPR de la console.',
+    amprInstalledHint: 'Activé : un FPKG de débogage installé démarre via ampr-emu-ng depuis son app.pkg ; une installation retail reçoit ampr-emu-ng dans ses bibliothèques. Désactivé : l\'AMPR de la console. Modifiable par jeu dans sa fiche.',
     kindInstalled: 'Installés',
     badgeInstalled: 'INSTALLÉ',
     badgeRetail: 'RETAIL',
@@ -2016,8 +2454,6 @@ var MSG = {
     fInstalledOn: 'Installé sur',
     fAlsoFound: 'Trouvé aussi',
     alsoFoundWhy: '(non monté : la copie installée l\'emporte)',
-    noteRetail: 'Installation retail. Kraken Mount ajoute ses bibliothèques au lancement ; désinstallez le jeu depuis le menu de la console.',
-    noteFpkg: 'Installé depuis un FPKG. Kraken Mount ajoute ses bibliothèques au lancement ; désinstallez le jeu depuis le menu de la console.'
   },
   ja: {
     screens: '画面', library: 'ライブラリ', settings: '設定',
@@ -2046,22 +2482,24 @@ var MSG = {
     noGames: 'ゲームが見つかりません。', noGamesType: 'この種類のゲームはありません。',
     search: 'ゲームを検索', noGamesMatch: '「{q}」に一致するゲームはありません。', noGamesDrive: 'このドライブにはゲームがありません。',
     play: 'プレイ', launchFailed: 'ゲームを起動できませんでした: {error}',
+    closeGame: 'ゲームを終了', closeTitle: '{name} を終了しますか？', closeText: '本体のメニューから終了したときと同じようにゲームを終了します。保存していない進行状況は失われます。', closeFailed: 'ゲームを終了できませんでした：{error}',
     emptyCopy: '{pkg} ファイルまたはゲームフォルダーを {dir}（USB ドライブでは {usb}）にコピーしてから「再スキャン」を押してください。',
     emptyHome: '各ゲームは登録されるとここにもホーム画面にも表示されます。',
     showLog: 'ログを表示', hideLog: 'ログを隠す',
     updAvail: 'Kraken Mount {v} が利用可能です。', updNow: '更新', updLater: '後で', updRetry: '再試行',
     updRunning: '{v} に更新しています... 新しいバージョンが起動するとページが再読み込みされます。', updFailed: '更新に失敗しました: {error}', updNoStart: 'Kraken Mount {v} が起動しませんでした（kraken.log を参照）',
     delete: '削除', rebuildCache: 'キャッシュを再作成', close: '閉じる', storage: 'ストレージ',
-    fTitleId: 'Title ID', fVersion: 'バージョン', fStatus: '状態', fType: '種類', fDrive: 'ドライブ',
+    fDrive: 'ドライブ',
     fPath: 'パス', fCachePath: 'キャッシュのパス', fCacheSize: 'キャッシュのサイズ', fCacheBuilt: 'キャッシュ作成日時',
     fCrash: '最後のクラッシュ', crashHint: 'ゲームが実行中にクラッシュしました。原因は多くの場合ダンプ、ampr-emu-ng、PlayGo スタブで、マウントではありません。issue を作るときは「レポート」を使ってください。', report: 'レポート',
     fBackport: 'バックポート', yes: 'はい', no: 'いいえ', notBuilt: '未作成',
     playgoStub: 'PlayGo スタブ', playgoHint: 'ゲームが黒い画面のままならオフに、ダウンロードの完了を求められたらオンにします。',
     overlayLbl: 'Kraken Mount のライブラリ', overlayHint: '独自のシステムライブラリを持つアプリ（Playden のタイトル）の場合のみオフにします。オフにするとゲームは ampr-emu-ng と同梱のエミュレーターなしで動作します。',
+    ngLbl: 'ampr-emu-ng', ngHint: 'オン：ゲームは ampr-emu-ng で動作します（インストール済みのデバッグ FPKG は本体のライセンス確認なしに app.pkg から起動します）。オフ：本体の AMPR を使います。',
+    discTitle: 'ディスクから起動', discText: '製品版のコピーです。ディスクを本体に入れた状態でホーム画面からのみ起動できます。Kraken Mount からは起動できません。',
     szGame: 'ゲーム', szDlc: 'DLC', szSave: 'セーブ', szCache: 'キャッシュ',
     szPart: '{part} {size}', szNa: '{part} 不明', szTotal: '合計 {size}',
     sizesNone: 'サイズを取得できません', sizesLoading: 'サイズを読み込んでいます...',
-    sizesDup: '重複コピー: サイズはライブラリ側のコピーに表示されます。',
     cancel: 'キャンセル',
     rebuildTitle: '{name} のキャッシュを再作成しますか？',
     rebuildText: 'キャッシュを作り直します。完了するまでゲームは使用できません。',
@@ -2109,6 +2547,10 @@ var MSG = {
     driveStats: '使用 {used} · 空き {free} · 合計 {total}', driveGames: '{n} 本のゲーム · {size}', driveNoGames: 'ゲームなし',
     showGames: 'ゲームを表示', noDrives: 'ドライブが見つかりません。',
     hiddenTab: '非表示', hide: '非表示にする', unhide: '再表示', hdUnhideAll: 'すべて再表示',
+    itRun: '実行中', itKept: 'インストール済み', irunNone: '現在インストール中のものはありません。', keptNone: 'スキャンフォルダーにインストール済みゲームの .pkg はありません。',
+    hdDelText: 'ドライブから削除します：{path}。元に戻せません。', hdDelFailed: '削除できませんでした：{error}',
+    dupTab: '重複',
+    hideDupText: 'Kraken Mount はこのコピーを表示しなくなります：{path}。ライブラリのコピーは残ります。「非表示」画面から再表示できます。', delDupPkg: 'この .pkg ファイルをドライブから削除します：{path}。ライブラリのコピーとそのキャッシュは残ります。元に戻せません。', delDupFolder: 'このゲームフォルダーをドライブから削除します：{path}。ライブラリのコピーとそのキャッシュは残ります。元に戻せません。',
     hdHint: '非表示のゲームはホーム画面とライブラリから外れます。ファイルはドライブに残り、再表示すると次のスキャンでゲームが戻ります。',
     hdNone: '非表示のゲームはありません。ゲームの詳細画面から非表示にできます。',
     hdAllTitle: 'すべてのゲームを再表示しますか？', hdAllText: '非表示の {n} 件がスキャン対象に戻ります。config.toml で手動で除外したフォルダーも含みます。それらのゲームはホーム画面に戻ります。',
@@ -2138,14 +2580,13 @@ var MSG = {
     idelHint: '本体がインストール完了を報告した後だけです。',
     idelFree: '内蔵 SSD：空き {free}。',
     idelSame: 'インストール画面のスイッチと同じです。',
-    gKept: 'インストール済み、.pkg が残っています',
     keptHint: 'これらはインストール済みです。.pkg を削除するとドライブが空き、ゲームは残ります。',
     installedWord: 'インストール済み',
     delPkg: '.pkg を削除',
     keptDelTitle: '{name} の .pkg を削除しますか？',
     keptDelText: 'ファイル {path} がドライブから削除されます。インストール済みのゲームは残ります。元に戻せません。',
     amprInstalled: 'インストール済みのゲームに ampr-emu-ng を使う',
-    amprInstalledHint: 'オフ：インストール済みのゲームは本体の AMPR で動作します。',
+    amprInstalledHint: 'オン：インストール済みのデバッグ FPKG は ampr-emu-ng で app.pkg から起動し、製品版のインストールはライブラリに ampr-emu-ng が入ります。オフ：本体の AMPR を使います。ゲームごとに詳細画面で変更できます。',
     kindInstalled: 'インストール済み',
     badgeInstalled: 'インストール済み',
     badgeRetail: '製品版',
@@ -2173,8 +2614,6 @@ var MSG = {
     fInstalledOn: 'インストール先',
     fAlsoFound: '他にも検出',
     alsoFoundWhy: '（未マウント：インストール済みのコピーが優先）',
-    noteRetail: '製品版のインストールです。Kraken Mount は起動時にライブラリを追加します。アンインストールは本体のメニューから行ってください。',
-    noteFpkg: 'FPKG からインストールされました。Kraken Mount は起動時にライブラリを追加します。アンインストールは本体のメニューから行ってください。'
   },
   pt: {
     screens: 'Telas', library: 'Biblioteca', settings: 'Configurações',
@@ -2203,22 +2642,24 @@ var MSG = {
     noGames: 'Nenhum jogo encontrado.', noGamesType: 'Nenhum jogo deste tipo.',
     search: 'Pesquisar jogos', noGamesMatch: 'Nenhum jogo corresponde a "{q}".', noGamesDrive: 'Nenhum jogo nesta unidade.',
     play: 'Jogar', launchFailed: 'Não foi possível iniciar o jogo: {error}',
+    closeGame: 'Fechar jogo', closeTitle: 'Fechar {name}?', closeText: 'O jogo fecha como pelo menu do console. O progresso não salvo é perdido.', closeFailed: 'Não foi possível fechar o jogo: {error}',
     emptyCopy: 'Copie arquivos {pkg} ou pastas de jogos para {dir} (ou {usb} em um drive USB) e pressione Escanear de novo.',
     emptyHome: 'Cada jogo aparece aqui e na tela inicial assim que é registrado.',
     showLog: 'Mostrar log', hideLog: 'Ocultar log',
     updAvail: 'Kraken Mount {v} está disponível.', updNow: 'Atualizar', updLater: 'Depois', updRetry: 'Tentar de novo',
     updRunning: 'Atualizando para {v}... A página recarrega quando a nova versão estiver rodando.', updFailed: 'Falha na atualização: {error}', updNoStart: 'O Kraken Mount {v} não iniciou (veja kraken.log)',
     delete: 'Excluir', rebuildCache: 'Recriar cache', close: 'Fechar', storage: 'Armazenamento',
-    fTitleId: 'Title ID', fVersion: 'Versão', fStatus: 'Status', fType: 'Tipo', fDrive: 'Drive',
+    fDrive: 'Drive',
     fPath: 'Caminho', fCachePath: 'Caminho do cache', fCacheSize: 'Tamanho do cache', fCacheBuilt: 'Cache criado',
     fCrash: 'Última falha', crashHint: 'O jogo falhou durante a execução. Geralmente a causa é o dump, o ampr-emu-ng ou o stub do PlayGo, não a montagem. Use Relatório ao abrir uma issue.', report: 'Relatório',
     fBackport: 'Backport', yes: 'Sim', no: 'Não', notBuilt: 'não criado',
     playgoStub: 'Stub do PlayGo', playgoHint: 'Desligue se o jogo ficar na tela preta; ligue se ele pedir para concluir o download.',
     overlayLbl: 'Bibliotecas do Kraken Mount', overlayHint: 'Desligue só para apps que trazem as próprias bibliotecas do sistema (títulos do Playden): o jogo então roda sem o ampr-emu-ng e os emuladores incluídos.',
+    ngLbl: 'ampr-emu-ng', ngHint: 'Ligado: o jogo roda pelo ampr-emu-ng (um FPKG de depuração instalado inicia a partir do seu app.pkg, sem a verificação de licença do console). Desligado: o AMPR do próprio console.',
+    discTitle: 'Inicie pelo disco', discText: 'Cópia retail: só inicia com o disco no console, pela tela inicial. O Kraken Mount não consegue iniciá-la.',
     szGame: 'Jogo', szDlc: 'DLC', szSave: 'Salvamento', szCache: 'Cache',
     szPart: '{part} {size}', szNa: '{part} n/d', szTotal: 'Total {size}',
     sizesNone: 'Tamanhos indisponíveis', sizesLoading: 'Carregando tamanhos...',
-    sizesDup: 'Cópia duplicada: os tamanhos aparecem na cópia da biblioteca.',
     cancel: 'Cancelar',
     rebuildTitle: 'Recriar o cache de {name}?',
     rebuildText: 'O cache será criado de novo. O jogo fica indisponível até terminar.',
@@ -2266,6 +2707,10 @@ var MSG = {
     driveStats: '{used} usado · {free} livre · {total} no total', driveGames: '{n} jogos · {size}', driveNoGames: 'Nenhum jogo',
     showGames: 'Mostrar jogos', noDrives: 'Nenhuma unidade encontrada.',
     hiddenTab: 'Ocultos', hide: 'Ocultar', unhide: 'Reexibir', hdUnhideAll: 'Reexibir todos',
+    itRun: 'Em andamento', itKept: 'Já instalado', irunNone: 'Nada está sendo instalado agora.', keptNone: 'Nenhum jogo instalado tem o .pkg nas pastas de varredura.',
+    hdDelText: 'Será excluído da unidade: {path}. Não dá para desfazer.', hdDelFailed: 'Não foi possível excluir: {error}',
+    dupTab: 'Duplicados',
+    hideDupText: 'O Kraken Mount deixa de listar esta cópia: {path}. A cópia da biblioteca continua; reexiba-a na tela Ocultos.', delDupPkg: 'Este arquivo .pkg será excluído da unidade: {path}. A cópia da biblioteca e o cache dela continuam. Não dá para desfazer.', delDupFolder: 'Esta pasta do jogo será excluída da unidade: {path}. A cópia da biblioteca e o cache dela continuam. Não dá para desfazer.',
     hdHint: 'Jogos ocultos saem da tela inicial e da biblioteca. Os arquivos continuam na unidade; Reexibir traz o jogo de volta no próximo escaneamento.',
     hdNone: 'Nenhum jogo oculto. Oculte um pela ficha do jogo.',
     hdAllTitle: 'Reexibir todos os jogos?', hdAllText: '{n} entradas ocultas voltam à varredura, incluindo pastas excluídas à mão no config.toml. Os jogos delas voltam à tela inicial.',
@@ -2295,14 +2740,13 @@ var MSG = {
     idelHint: 'Só quando o console informar que a instalação terminou.',
     idelFree: 'SSD interno: {free} livres.',
     idelSame: 'O mesmo botão da tela Instalar.',
-    gKept: 'Instalado, .pkg ainda aqui',
     keptHint: 'Estes já estão instalados. Apagar o .pkg libera o drive e mantém o jogo.',
     installedWord: 'instalado',
     delPkg: 'Apagar .pkg',
     keptDelTitle: 'Apagar o .pkg de {name}?',
     keptDelText: 'O arquivo {path} será apagado do drive. O jogo instalado continua. Isso não pode ser desfeito.',
     amprInstalled: 'Usar ampr-emu-ng nos jogos instalados',
-    amprInstalledHint: 'Desligado: os jogos instalados usam o AMPR do próprio console.',
+    amprInstalledHint: 'Ligado: um FPKG de depuração instalado inicia pelo ampr-emu-ng a partir do seu app.pkg; uma instalação retail recebe o ampr-emu-ng nas bibliotecas. Desligado: o AMPR do próprio console. Cada jogo pode mudar isso na sua ficha.',
     kindInstalled: 'Instalados',
     badgeInstalled: 'INSTALADO',
     badgeRetail: 'RETAIL',
@@ -2330,8 +2774,6 @@ var MSG = {
     fInstalledOn: 'Instalado em',
     fAlsoFound: 'Também encontrado',
     alsoFoundWhy: '(não montado: a cópia instalada tem prioridade)',
-    noteRetail: 'Instalação retail. O Kraken Mount adiciona suas bibliotecas ao iniciar; desinstale pelo menu do console.',
-    noteFpkg: 'Instalado a partir de um FPKG. O Kraken Mount adiciona suas bibliotecas ao iniciar; desinstale pelo menu do console.'
   },
   it: {
     screens: 'Schermate', library: 'Libreria', settings: 'Impostazioni',
@@ -2360,22 +2802,24 @@ var MSG = {
     noGames: 'Nessun gioco trovato.', noGamesType: 'Nessun gioco di questo tipo.',
     search: 'Cerca giochi', noGamesMatch: 'Nessun gioco corrisponde a "{q}".', noGamesDrive: 'Nessun gioco su questa unità.',
     play: 'Gioca', launchFailed: 'Impossibile avviare il gioco: {error}',
+    closeGame: 'Chiudi gioco', closeTitle: 'Chiudere {name}?', closeText: 'Il gioco si chiude come dal menu della console. I progressi non salvati vanno persi.', closeFailed: 'Impossibile chiudere il gioco: {error}',
     emptyCopy: 'Copia file {pkg} o cartelle di giochi in {dir} (o in {usb} su un\'unità USB), poi premi Ripeti scansione.',
     emptyHome: 'Ogni gioco compare qui e nella schermata Home una volta registrato.',
     showLog: 'Mostra registro', hideLog: 'Nascondi registro',
     updAvail: 'Kraken Mount {v} è disponibile.', updNow: 'Aggiorna', updLater: 'Più tardi', updRetry: 'Riprova',
     updRunning: 'Aggiornamento a {v}... La pagina si ricarica quando la nuova versione è in esecuzione.', updFailed: 'Aggiornamento non riuscito: {error}', updNoStart: 'Kraken Mount {v} non si è avviato (vedi kraken.log)',
     delete: 'Elimina', rebuildCache: 'Ricrea cache', close: 'Chiudi', storage: 'Archiviazione',
-    fTitleId: 'Title ID', fVersion: 'Versione', fStatus: 'Stato', fType: 'Tipo', fDrive: 'Unità',
+    fDrive: 'Unità',
     fPath: 'Percorso', fCachePath: 'Percorso cache', fCacheSize: 'Dimensione cache', fCacheBuilt: 'Cache creata',
     fCrash: 'Ultimo crash', crashHint: 'Il gioco è andato in crash durante l\'esecuzione. Di solito la causa è il dump, ampr-emu-ng o lo stub PlayGo, non il montaggio. Usa Report quando apri una issue.', report: 'Report',
     fBackport: 'Backport', yes: 'Sì', no: 'No', notBuilt: 'non creata',
     playgoStub: 'Stub PlayGo', playgoHint: 'Disattivalo se il gioco resta su schermo nero; attivalo se chiede di completare il download.',
     overlayLbl: 'Librerie di Kraken Mount', overlayHint: 'Disattivale solo per le app che portano le proprie librerie di sistema (titoli Playden): il gioco gira allora senza ampr-emu-ng e gli emulatori inclusi.',
+    ngLbl: 'ampr-emu-ng', ngHint: 'Attivo: il gioco usa ampr-emu-ng (un FPKG di debug installato si avvia dal suo app.pkg, senza il controllo della licenza della console). Disattivo: l\'AMPR della console.',
+    discTitle: 'Avvia dal disco', discText: 'Copia retail: si avvia solo con il disco nella console, dalla schermata Home. Kraken Mount non può avviarla.',
     szGame: 'Gioco', szDlc: 'DLC', szSave: 'Salvataggi', szCache: 'Cache',
     szPart: '{part} {size}', szNa: '{part} n/d', szTotal: 'Totale {size}',
     sizesNone: 'Dimensioni non disponibili', sizesLoading: 'Caricamento delle dimensioni...',
-    sizesDup: 'Copia duplicata: le dimensioni sono mostrate sulla copia in libreria.',
     cancel: 'Annulla',
     rebuildTitle: 'Ricreare la cache di {name}?',
     rebuildText: 'La cache verrà creata di nuovo. Il gioco non è disponibile finché non termina.',
@@ -2423,6 +2867,10 @@ var MSG = {
     driveStats: '{used} usati · {free} liberi · {total} in totale', driveGames: '{n} giochi · {size}', driveNoGames: 'Nessun gioco',
     showGames: 'Mostra giochi', noDrives: 'Nessuna unità trovata.',
     hiddenTab: 'Nascosti', hide: 'Nascondi', unhide: 'Mostra', hdUnhideAll: 'Mostra tutti',
+    itRun: 'In corso', itKept: 'Già installato', irunNone: 'Al momento non si installa nulla.', keptNone: 'Nessun gioco installato ha il suo .pkg nelle cartelle di scansione.',
+    hdDelText: 'Verrà eliminato dal disco: {path}. Non si può annullare.', hdDelFailed: 'Impossibile eliminare: {error}',
+    dupTab: 'Duplicati',
+    hideDupText: 'Kraken Mount non mostrerà più questa copia: {path}. La copia della libreria resta; mostrala di nuovo dalla schermata Nascosti.', delDupPkg: 'Questo file .pkg verrà eliminato dal disco: {path}. La copia della libreria e la sua cache restano. Non si può annullare.', delDupFolder: 'Questa cartella del gioco verrà eliminata dal disco: {path}. La copia della libreria e la sua cache restano. Non si può annullare.',
     hdHint: 'I giochi nascosti escono dalla schermata Home e dalla libreria. I loro file restano sull\'unità; Mostra riporta un gioco alla prossima scansione.',
     hdNone: 'Nessun gioco nascosto. Nascondine uno dalla sua scheda.',
     hdAllTitle: 'Mostrare di nuovo tutti i giochi?', hdAllText: '{n} voci nascoste tornano nella scansione, comprese le cartelle escluse a mano in config.toml. I loro giochi tornano nella schermata Home.',
@@ -2452,14 +2900,13 @@ var MSG = {
     idelHint: 'Solo quando la console segnala l\'installazione completata.',
     idelFree: 'SSD interno: {free} liberi.',
     idelSame: 'Lo stesso interruttore della schermata Installa.',
-    gKept: 'Installato, .pkg ancora qui',
     keptHint: 'Sono già installati. Eliminare il .pkg libera l\'unità e mantiene il gioco.',
     installedWord: 'installato',
     delPkg: 'Elimina .pkg',
     keptDelTitle: 'Eliminare il .pkg di {name}?',
     keptDelText: 'Il file {path} viene eliminato dall\'unità. Il gioco installato resta. Non si può annullare.',
     amprInstalled: 'Usa ampr-emu-ng per i giochi installati',
-    amprInstalledHint: 'Disattivato: i giochi installati usano l\'AMPR della console.',
+    amprInstalledHint: 'Attivo: un FPKG di debug installato si avvia con ampr-emu-ng dal suo app.pkg; un\'installazione retail riceve ampr-emu-ng nelle librerie. Disattivo: l\'AMPR della console. Modificabile per gioco nella sua scheda.',
     kindInstalled: 'Installati',
     badgeInstalled: 'INSTALLATO',
     badgeRetail: 'RETAIL',
@@ -2487,8 +2934,6 @@ var MSG = {
     fInstalledOn: 'Installato su',
     fAlsoFound: 'Trovato anche',
     alsoFoundWhy: '(non montato: vince la copia installata)',
-    noteRetail: 'Installazione retail. Kraken Mount aggiunge le sue librerie all\'avvio; disinstallalo dal menu della console.',
-    noteFpkg: 'Installato da un FPKG. Kraken Mount aggiunge le sue librerie all\'avvio; disinstallalo dal menu della console.'
   },
   ko: {
     screens: '화면', library: '라이브러리', settings: '설정',
@@ -2517,22 +2962,24 @@ var MSG = {
     noGames: '게임을 찾을 수 없습니다.', noGamesType: '이 유형의 게임이 없습니다.',
     search: '게임 검색', noGamesMatch: '"{q}"와(과) 일치하는 게임이 없습니다.', noGamesDrive: '이 드라이브에 게임이 없습니다.',
     play: '플레이', launchFailed: '게임을 시작할 수 없습니다: {error}',
+    closeGame: '게임 종료', closeTitle: '{name}을(를) 종료할까요?', closeText: '콘솔 메뉴에서 종료할 때처럼 게임이 종료됩니다. 저장하지 않은 진행 상황은 사라집니다.', closeFailed: '게임을 종료하지 못했습니다: {error}',
     emptyCopy: '{pkg} 파일이나 게임 폴더를 {dir}(USB 드라이브에서는 {usb})에 복사한 다음 다시 스캔을 누르세요.',
     emptyHome: '각 게임은 등록되면 여기와 홈 화면에 나타납니다.',
     showLog: '로그 표시', hideLog: '로그 숨기기',
     updAvail: 'Kraken Mount {v}을(를) 사용할 수 있습니다.', updNow: '업데이트', updLater: '나중에', updRetry: '다시 시도',
     updRunning: '{v}(으)로 업데이트하는 중... 새 버전이 실행되면 페이지가 다시 로드됩니다.', updFailed: '업데이트 실패: {error}', updNoStart: 'Kraken Mount {v}이(가) 시작되지 않았습니다 (kraken.log 참조)',
     delete: '삭제', rebuildCache: '캐시 다시 생성', close: '닫기', storage: '저장소',
-    fTitleId: 'Title ID', fVersion: '버전', fStatus: '상태', fType: '유형', fDrive: '드라이브',
+    fDrive: '드라이브',
     fPath: '경로', fCachePath: '캐시 경로', fCacheSize: '캐시 크기', fCacheBuilt: '캐시 생성 시각',
     fCrash: '마지막 충돌', crashHint: '게임이 실행 중에 충돌했습니다. 원인은 보통 덤프, ampr-emu-ng 또는 PlayGo 스텁이며 마운트가 아닙니다. issue를 열 때 \'보고서\'를 사용하세요.', report: '보고서',
     fBackport: '백포트', yes: '예', no: '아니요', notBuilt: '생성 안 됨',
     playgoStub: 'PlayGo 스텁', playgoHint: '게임이 검은 화면에서 멈추면 끄고, 다운로드를 완료하라고 하면 켜세요.',
     overlayLbl: 'Kraken Mount 라이브러리', overlayHint: '자체 시스템 라이브러리를 포함한 앱(Playden 타이틀)에서만 끄세요. 끄면 게임이 ampr-emu-ng와 내장 에뮬레이터 없이 실행됩니다.',
+    ngLbl: 'ampr-emu-ng', ngHint: '켜면 게임이 ampr-emu-ng로 실행됩니다(설치된 디버그 FPKG는 콘솔의 라이선스 확인 없이 app.pkg에서 시작). 끄면 콘솔 자체 AMPR을 사용합니다.',
+    discTitle: '디스크로 실행', discText: '정식판 사본: 콘솔에 디스크를 넣은 상태에서 홈 화면으로만 실행됩니다. Kraken Mount로는 실행할 수 없습니다.',
     szGame: '게임', szDlc: 'DLC', szSave: '세이브', szCache: '캐시',
     szPart: '{part} {size}', szNa: '{part} 해당 없음', szTotal: '합계 {size}',
     sizesNone: '크기를 알 수 없음', sizesLoading: '크기를 불러오는 중...',
-    sizesDup: '중복 사본: 크기는 라이브러리의 사본에 표시됩니다.',
     cancel: '취소',
     rebuildTitle: '{name}의 캐시를 다시 생성할까요?',
     rebuildText: '캐시가 다시 생성됩니다. 완료될 때까지 게임을 사용할 수 없습니다.',
@@ -2580,6 +3027,10 @@ var MSG = {
     driveStats: '{used} 사용 · {free} 사용 가능 · 전체 {total}', driveGames: '게임 {n}개 · {size}', driveNoGames: '게임 없음',
     showGames: '게임 보기', noDrives: '드라이브를 찾을 수 없습니다.',
     hiddenTab: '숨김', hide: '숨기기', unhide: '숨김 해제', hdUnhideAll: '모두 숨김 해제',
+    itRun: '진행 중', itKept: '이미 설치됨', irunNone: '지금 설치 중인 항목이 없습니다.', keptNone: '스캔 폴더에 설치된 게임의 .pkg가 없습니다.',
+    hdDelText: '드라이브에서 삭제됩니다: {path}. 되돌릴 수 없습니다.', hdDelFailed: '삭제하지 못했습니다: {error}',
+    dupTab: '중복',
+    hideDupText: 'Kraken Mount가 이 사본을 더 이상 표시하지 않습니다: {path}. 라이브러리의 사본은 남습니다. 숨김 화면에서 숨김 해제할 수 있습니다.', delDupPkg: '이 .pkg 파일이 드라이브에서 삭제됩니다: {path}. 라이브러리의 사본과 캐시는 남습니다. 되돌릴 수 없습니다.', delDupFolder: '이 게임 폴더가 드라이브에서 삭제됩니다: {path}. 라이브러리의 사본과 캐시는 남습니다. 되돌릴 수 없습니다.',
     hdHint: '숨긴 게임은 홈 화면과 라이브러리에서 빠집니다. 파일은 드라이브에 남아 있으며, 숨김 해제하면 다음 스캔 때 게임이 돌아옵니다.',
     hdNone: '숨긴 게임이 없습니다. 게임 상세 화면에서 숨길 수 있습니다.',
     hdAllTitle: '모든 게임의 숨김을 해제할까요?', hdAllText: '숨긴 항목 {n}개가 다시 스캔 대상이 됩니다. config.toml에서 직접 제외한 폴더도 포함됩니다. 해당 게임은 홈 화면으로 돌아옵니다.',
@@ -2609,14 +3060,13 @@ var MSG = {
     idelHint: '콘솔이 설치 완료를 알린 뒤에만 삭제합니다.',
     idelFree: '내장 SSD: {free} 남음.',
     idelSame: '설치 화면의 스위치와 같습니다.',
-    gKept: '설치됨, .pkg 남아 있음',
     keptHint: '이미 설치되어 있습니다. .pkg를 삭제하면 드라이브 공간이 생기고 게임은 남습니다.',
     installedWord: '설치됨',
     delPkg: '.pkg 삭제',
     keptDelTitle: '{name}의 .pkg를 삭제할까요?',
     keptDelText: '파일 {path}이(가) 드라이브에서 삭제됩니다. 설치된 게임은 남습니다. 되돌릴 수 없습니다.',
     amprInstalled: '설치된 게임에 ampr-emu-ng 사용',
-    amprInstalledHint: '끄면 설치된 게임은 콘솔 자체 AMPR로 실행됩니다.',
+    amprInstalledHint: '켜면 설치된 디버그 FPKG는 ampr-emu-ng로 app.pkg에서 시작되고, 정식판 설치는 라이브러리에 ampr-emu-ng가 들어갑니다. 끄면 콘솔 자체 AMPR로 실행됩니다. 게임별로 상세 화면에서 바꿀 수 있습니다.',
     kindInstalled: '설치됨',
     badgeInstalled: '설치됨',
     badgeRetail: '정품',
@@ -2644,8 +3094,6 @@ var MSG = {
     fInstalledOn: '설치 위치',
     fAlsoFound: '추가로 발견',
     alsoFoundWhy: '(마운트 안 됨: 설치된 사본이 우선)',
-    noteRetail: '정품 설치입니다. Kraken Mount는 실행 시 자체 라이브러리를 추가합니다. 제거는 콘솔 메뉴에서 하세요.',
-    noteFpkg: 'FPKG로 설치되었습니다. Kraken Mount는 실행 시 자체 라이브러리를 추가합니다. 제거는 콘솔 메뉴에서 하세요.'
   },
   ar: {
     screens: 'الأقسام', library: 'المكتبة', settings: 'الإعدادات',
@@ -2674,22 +3122,24 @@ var MSG = {
     noGames: 'لم يُعثر على ألعاب.', noGamesType: 'لا توجد ألعاب من هذا النوع.',
     search: 'ابحث عن الألعاب', noGamesMatch: 'لا توجد ألعاب تطابق "{q}".', noGamesDrive: 'لا توجد ألعاب على هذا القرص.',
     play: 'العب', launchFailed: 'تعذّر تشغيل اللعبة: {error}',
+    closeGame: 'إغلاق اللعبة', closeTitle: 'إغلاق {name}؟', closeText: 'تُغلق اللعبة كما من قائمة الجهاز. يضيع التقدم غير المحفوظ.', closeFailed: 'تعذّر إغلاق اللعبة: {error}',
     emptyCopy: 'انسخ ملفات {pkg} أو مجلدات الألعاب إلى {dir} (أو {usb} على محرك USB)، ثم اضغط إعادة المسح.',
     emptyHome: 'تظهر كل لعبة هنا وعلى الشاشة الرئيسية بعد تسجيلها.',
     showLog: 'إظهار السجل', hideLog: 'إخفاء السجل',
     updAvail: 'الإصدار {v} من Kraken Mount متاح.', updNow: 'تحديث', updLater: 'لاحقًا', updRetry: 'إعادة المحاولة',
     updRunning: 'جارٍ التحديث إلى {v}... ستُعاد تحميل الصفحة بعد تشغيل الإصدار الجديد.', updFailed: 'فشل التحديث: {error}', updNoStart: 'لم يبدأ Kraken Mount {v} (راجع kraken.log)',
     delete: 'حذف', rebuildCache: 'إعادة إنشاء الذاكرة المؤقتة', close: 'إغلاق', storage: 'التخزين',
-    fTitleId: 'Title ID', fVersion: 'الإصدار', fStatus: 'الحالة', fType: 'النوع', fDrive: 'المحرك',
+    fDrive: 'المحرك',
     fPath: 'المسار', fCachePath: 'مسار الذاكرة المؤقتة', fCacheSize: 'حجم الذاكرة المؤقتة', fCacheBuilt: 'أُنشئت الذاكرة المؤقتة',
     fCrash: 'آخر تعطّل', crashHint: 'تعطّلت اللعبة أثناء التشغيل. السبب عادةً النسخة (dump) أو ampr-emu-ng أو بديل PlayGo، وليس التحميل. استخدم «تقرير» عند فتح issue.', report: 'تقرير',
     fBackport: 'الباكبورت', yes: 'نعم', no: 'لا', notBuilt: 'لم تُنشأ',
     playgoStub: 'بديل PlayGo', playgoHint: 'أوقفه إذا بقيت اللعبة على شاشة سوداء، وشغّله إذا طلبت إكمال التنزيل.',
     overlayLbl: 'مكتبات Kraken Mount', overlayHint: 'أوقفها فقط للتطبيقات التي تأتي بمكتبات النظام الخاصة بها (عناوين Playden): عندها تعمل اللعبة بدون ampr-emu-ng والمحاكيات المرفقة.',
+    ngLbl: 'ampr-emu-ng', ngHint: 'عند التشغيل: تعمل اللعبة عبر ampr-emu-ng (تبدأ حزمة FPKG التجريبية المثبّتة من ملف app.pkg الخاص بها دون فحص ترخيص الجهاز). عند الإيقاف: نظام AMPR الخاص بالجهاز.',
+    discTitle: 'شغّلها من القرص', discText: 'نسخة تجارية: لا تعمل إلا وقرصها في الجهاز، من الشاشة الرئيسية. لا يستطيع Kraken Mount تشغيلها.',
     szGame: 'اللعبة', szDlc: 'DLC', szSave: 'الحفظ', szCache: 'الذاكرة المؤقتة',
     szPart: '{part} {size}', szNa: '{part} غير متاح', szTotal: 'الإجمالي {size}',
     sizesNone: 'الأحجام غير متاحة', sizesLoading: 'جارٍ تحميل الأحجام...',
-    sizesDup: 'نسخة مكررة: الأحجام معروضة على النسخة الموجودة في المكتبة.',
     cancel: 'إلغاء',
     rebuildTitle: 'إعادة إنشاء الذاكرة المؤقتة لـ {name}؟',
     rebuildText: 'ستُنشأ الذاكرة المؤقتة من جديد. اللعبة غير متاحة حتى ينتهي ذلك.',
@@ -2737,6 +3187,10 @@ var MSG = {
     driveStats: 'المستخدم {used} · المتاح {free} · الإجمالي {total}', driveGames: 'الألعاب: {n} · {size}', driveNoGames: 'لا توجد ألعاب',
     showGames: 'إظهار الألعاب', noDrives: 'لم يُعثر على محركات أقراص.',
     hiddenTab: 'المخفية', hide: 'إخفاء', unhide: 'إظهار', hdUnhideAll: 'إظهار الكل',
+    itRun: 'قيد التنفيذ', itKept: 'مثبّت بالفعل', irunNone: 'لا يُثبَّت شيء الآن.', keptNone: 'لا توجد حزمة ‎.pkg لأي لعبة مثبّتة في مجلدات الفحص.',
+    hdDelText: 'سيُحذف من القرص: {path}. لا يمكن التراجع عن ذلك.', hdDelFailed: 'تعذّر الحذف: {error}',
+    dupTab: 'المكررة',
+    hideDupText: 'سيتوقف Kraken Mount عن عرض هذه النسخة: {path}. تبقى نسخة المكتبة؛ يمكنك إظهارها من شاشة المخفية.', delDupPkg: 'سيُحذف ملف ‎.pkg هذا من القرص: {path}. تبقى نسخة المكتبة وذاكرتها المؤقتة. لا يمكن التراجع عن ذلك.', delDupFolder: 'سيُحذف مجلد اللعبة هذا من القرص: {path}. تبقى نسخة المكتبة وذاكرتها المؤقتة. لا يمكن التراجع عن ذلك.',
     hdHint: 'الألعاب المخفية غائبة عن الشاشة الرئيسية والمكتبة. تبقى ملفاتها على المحرك؛ يعيد زر إظهار اللعبة مع المسح التالي.',
     hdNone: 'لا توجد ألعاب مخفية. أخفِ لعبة من صفحة تفاصيلها.',
     hdAllTitle: 'إظهار كل الألعاب؟', hdAllText: 'تعود {n} من العناصر المخفية إلى الفحص، بما فيها المجلدات المستبعدة يدويًا في config.toml. وتعود ألعابها إلى الشاشة الرئيسية.',
@@ -2766,14 +3220,13 @@ var MSG = {
     idelHint: 'فقط بعد أن يبلّغ الجهاز باكتمال التثبيت.',
     idelFree: 'SSD الداخلي: {free} متاحة.',
     idelSame: 'نفس المفتاح الموجود في شاشة التثبيت.',
-    gKept: 'مثبّتة، وملف .pkg ما زال هنا',
     keptHint: 'هذه مثبّتة. حذف ملف .pkg يحرّر مساحة القرص وتبقى اللعبة.',
     installedWord: 'مثبّتة',
     delPkg: 'حذف .pkg',
     keptDelTitle: 'حذف ملف .pkg الخاص بـ {name}؟',
     keptDelText: 'سيُحذف الملف {path} من القرص. تبقى اللعبة المثبّتة. لا يمكن التراجع عن ذلك.',
     amprInstalled: 'استخدام ampr-emu-ng للألعاب المثبّتة',
-    amprInstalledHint: 'عند الإيقاف: تعمل الألعاب المثبّتة بنظام AMPR الخاص بالجهاز.',
+    amprInstalledHint: 'عند التشغيل: تبدأ حزمة FPKG التجريبية المثبّتة عبر ampr-emu-ng من ملف app.pkg، وتحصل النسخة التجارية المثبّتة على ampr-emu-ng في مكتباتها. عند الإيقاف: نظام AMPR الخاص بالجهاز. يمكن تغييره لكل لعبة من صفحتها.',
     kindInstalled: 'المثبّتة',
     badgeInstalled: 'مثبّتة',
     badgeRetail: 'أصلية',
@@ -2801,8 +3254,6 @@ var MSG = {
     fInstalledOn: 'مثبّتة على',
     fAlsoFound: 'وُجدت أيضاً',
     alsoFoundWhy: '(غير مركّبة: النسخة المثبّتة لها الأولوية)',
-    noteRetail: 'تثبيت أصلي. يضيف Kraken Mount مكتباته عند التشغيل؛ أزل تثبيت اللعبة من قائمة الجهاز.',
-    noteFpkg: 'مثبّتة من FPKG. يضيف Kraken Mount مكتباته عند التشغيل؛ أزل تثبيت اللعبة من قائمة الجهاز.'
   }
 };
 // Each language in its own words (dump-forge's names and order), the <html lang> tag where it
@@ -2913,8 +3364,13 @@ var stopped = false, launchTried = false;
 var KINDS = [
   { id: 'all', key: 'kindAll' }, { id: 'pkg', label: 'FPKG' }, { id: 'installed', key: 'kindInstalled' },
   { id: 'zstd', label: 'ZSTD' },
-  { id: 'lz4', label: 'LZ4' }, { id: 'folder', key: 'kindFolders' }
+  { id: 'lz4', label: 'LZ4' }, { id: 'folder', key: 'kindFolders' }, { id: 'duplicate', key: 'dupTab' }
 ];
+// The grid's filter: Duplicates lists only the copies a library title beat; the others list them too.
+function inFilter(g) {
+  if (filter === 'duplicate') return g.status === 'duplicate';
+  return filter === 'all' || gameKind(g) === filter;
+}
 function kindLabel(kind) { return kind.key ? t(kind.key) : kind.label; }
 var LABEL = { pending: 'stPending', checking: 'stChecking', building: 'stBuilding', ready: 'stReady', error: 'stError', duplicate: 'stDuplicate' };
 function statusLabel(s) { return t(LABEL[s] || LABEL.pending); }
@@ -3061,8 +3517,15 @@ function updateCover(c, g) {
 }
 
 function renderChips(games) {
-  var counts = { all: 0, pkg: 0, installed: 0, folder: 0, lz4: 0, zstd: 0 };
-  games.forEach(function (g) { if (g && g.title_id) { counts.all++; counts[gameKind(g)]++; } });
+  var counts = { all: 0, pkg: 0, installed: 0, folder: 0, lz4: 0, zstd: 0, duplicate: 0 };
+  games.forEach(function (g) {
+    if (!g || !g.title_id) return;
+    counts.all++;
+    counts[gameKind(g)]++;
+    if (g.status === 'duplicate') counts.duplicate++;
+  });
+  // The last duplicate gone while its chip is chosen: back to All.
+  if (filter === 'duplicate' && !counts.duplicate) filter = 'all';
   var box = $('chips');
   KINDS.forEach(function (kind, i) {
     var b = box.children[i];
@@ -3076,6 +3539,7 @@ function renderChips(games) {
       box.appendChild(b);
     }
     b.setAttribute('aria-pressed', String(kind.id === filter));
+    b.hidden = kind.id === 'duplicate' && !counts.duplicate;
     setText(b.firstChild, kindLabel(kind) + ' ');
     setText(b.lastChild, counts[kind.id]);
   });
@@ -3097,9 +3561,10 @@ function setFilter(id) {
 function stepFilter(d) {
   // L2/R2 (triggers and keycaps) step by screen side: the chips run right to left in RTL.
   if (isRtl()) d = -d;
-  var i = 0;
-  KINDS.forEach(function (k, j) { if (k.id === filter) i = j; });
-  setFilter(KINDS[(i + d + KINDS.length) % KINDS.length].id);
+  // Only the chips shown (Duplicates hides while there is none).
+  var shown = KINDS.filter(function (k, j) { var b = $('chips').children[j]; return !b || !b.hidden; }), i = 0;
+  shown.forEach(function (k, j) { if (k.id === filter) i = j; });
+  setFilter(shown[(i + d + shown.length) % shown.length].id);
 }
 // Drive chips: Internal first. A chip filters the grid to its games; the selected USB drive gets Unmount.
 function renderStorage(drives) {
@@ -3234,13 +3699,14 @@ function renderHidden(list) {
     box.setAttribute('data-key', key);
     box.textContent = '';
     list.forEach(function (g) {
-      var row = el('div', 'bprow'), name = el('div', 'bpname'), btn = el('button', 'small');
+      var row = el('div', 'bprow'), name = el('div', 'bpname'), btn = el('button', 'small'), del = el('button', 'small danger');
       name.appendChild(el('b'));
       name.appendChild(el('span'));
-      btn.type = 'button';
+      btn.type = del.type = 'button';
       btn.onclick = function () { unhide(g.path); };
+      del.onclick = function () { askDeleteHidden(g); };
       row.appendChild(name); row.appendChild(el('span', 'hdkind')); row.appendChild(el('code'));
-      row.appendChild(btn);
+      row.appendChild(btn); row.appendChild(del);
       box.appendChild(row);
     });
     if (hadFocus) { var first = driveButtons('hiddengames')[0]; if (first) first.focus(); else focusRail(); }
@@ -3255,6 +3721,10 @@ function renderHidden(list) {
     setText(r[2], g.path);
     setText(r[3], t('unhide'));
     r[3].setAttribute('aria-label', t('unhide') + ' ' + (known ? gameName(g) : g.path));
+    // Only a game Kraken Mount can read is deleted from here (web.rs delete_hidden).
+    r[4].hidden = !known;
+    setText(r[4], t('delete'));
+    r[4].setAttribute('aria-label', t('delete') + ' ' + (known ? gameName(g) : g.path));
   });
   $('hdempty').hidden = !!list.length;
   $('hdall').hidden = list.length < 2;
@@ -3272,6 +3742,20 @@ async function loadHidden() {
   } catch (e) {
     if (req === hiddenReq) live($('hdmsg'), function () { return t('hdLoadFailed', { error: e.message }); });
   }
+}
+function askDeleteHidden(g) {
+  ask(t('deleteTitle', { name: gameName(g) }), t('hdDelText', { path: g.path }), t('delete'), async function () {
+    live($('hdmsg'), null);
+    try {
+      var r = await fetch('/api/hidden/delete', { method: 'POST', body: g.path });
+      if (!r.ok) {
+        var why = (await r.text()) || 'HTTP ' + r.status;
+        live($('hdmsg'), function () { return t('hdDelFailed', { error: why }); });
+      }
+    } catch (e) { setBanner('offline', true); }
+    loadHidden();
+    schedule(200);
+  });
 }
 async function unhide(path) {
   live($('hdmsg'), null);
@@ -3291,7 +3775,7 @@ $('hdall').onclick = function () {
 $('m-hide').onclick = function () {
   var g = openTid && findGame(openTid);
   if (!g) return;
-  ask(t('hideTitle', { name: gameName(g) }), t('hideText', { path: g.path }), t('hide'), async function () {
+  ask(t('hideTitle', { name: gameName(g) }), t(g.status === 'duplicate' ? 'hideDupText' : 'hideText', { path: g.path }), t('hide'), async function () {
     try {
       var r = await fetch('/api/hide/' + encodeURIComponent(g.title_id), { method: 'POST', body: g.path });
       if (!r.ok) throw new Error((await r.text()) || 'HTTP ' + r.status);
@@ -3529,11 +4013,25 @@ function renderInstall() {
       kind: ikindLabel(r.kind), path: r.path || r.id, size: fmtSize(r.size), btn: t('delPkg') };
   });
   instRows($('keptlist'), kept, 'danger', askDeleteSource);
-  $('ikept').hidden = !kept.length;
+  $('keptnone').hidden = !!kept.length;
+  renderItabs(!!c || q.length > 0, pd.length, kept.length);
   var cache = (state && state.cache) || {};
   setText($('idelhint'), t('idelHint') + ' ' + t('idelFree', { free: gb(cache.free) }));
   if (cfg) $('i_del').checked = cfg.install_delete_source === true;
 }
+// The Install screen's tabs: Running (with the After install switch) until another is chosen.
+var itab = 'run';
+function renderItabs(running, npd, nkept) {
+  var cur = itab;
+  each('#itabs .seg-opt', function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-itab') === cur)); });
+  each('#install .ipane', function (p) { p.hidden = p.getAttribute('data-ipane') !== cur; });
+  setText($('itab-pd-n'), npd);
+  setText($('itab-kept-n'), nkept);
+  $('irunnone').hidden = running;
+}
+each('#itabs .seg-opt', function (b) {
+  b.onclick = function () { itab = b.getAttribute('data-itab'); renderInstall(); };
+});
 async function instPost(path, body) {
   live($('imsg'), null);
   instLoadErr = false;
@@ -3617,7 +4115,7 @@ function renderGrid(games) {
   var grid = $('grid'), seen = {}, count = 0;
   var focus = document.activeElement, focusKey = focus && focus.getAttribute ? focus.getAttribute('data-key') : null;
   games.forEach(function (g) {
-    if (!g || !g.title_id || (filter !== 'all' && gameKind(g) !== filter)) return;
+    if (!g || !g.title_id || !inFilter(g)) return;
     if (query && !matchesQuery(g, query)) return;
     if (driveFilter && g.drive !== driveFilter) return;
     var id = gameId(g);
@@ -3690,61 +4188,82 @@ function renderModal() {
   if (isRunning(g)) status = t('statusRunning', { status: status });
   var backport = g.backport == null || g.backport === false || g.backport === '' ? t('no') :
     g.backport === true ? t('yes') : String(g.backport);
-  // [label, value, kind]: 'mono' for ids and paths, 'tag' for the status.
-  var rows = [
-    [t('fTitleId'), g.title_id, 'mono'], [t('fVersion'), g.version || '—'], [t('fStatus'), status, 'tag'],
-    [t('fType'), installed ? t(g.retail ? 'typeInstRetail' : 'typeInstFpkg') : badgeText(g) + ' (' + g.kind + ')'],
-    [t(installed ? 'fInstalledOn' : 'fDrive'), driveLabel(g.drive)],
-    [t('fPath'), g.path || '—', 'mono'],
-    [t('fCachePath'), (state.cache && state.cache.path ? state.cache.path : '/data/krakenmount/caches') + '/' + g.title_id, 'mono'],
-    [t('fCacheSize'), fmtSize(g.cache_size)], [t('fCacheBuilt'), fmtTime(g.cache_built)], [t('fBackport'), backport]
-  ];
+  // The status and the type: tags after the title id and version in the header.
+  var st = $('m-status');
+  setText(st, status);
+  st.className = 'tag m-status' + (g.status === 'ready' ? ' green' : '');
+  setText($('m-type'), installed ? t(g.retail ? 'typeInstRetail' : 'typeInstFpkg') : badgeText(g) + ' (' + g.kind + ')');
+  // [label, value, kind]: 'mono' for paths, 'wide' for a path that takes the whole row. The fields
+  // fill two columns row by row.
+  // A duplicate has no cache of its own (the title's is the library copy's): no cache rows.
+  var dup = g.status === 'duplicate';
+  var rows = [[t(installed ? 'fInstalledOn' : 'fDrive'), driveLabel(g.drive)], [t('fBackport'), backport]];
+  if (!dup) rows.push([t('fCacheSize'), fmtSize(g.cache_size)], [t('fCacheBuilt'), fmtTime(g.cache_built)]);
+  // Path | cache path as the third pair (cache path under cache built).
+  rows.push([t('fPath'), g.path || '—', 'mono']);
+  if (!dup) rows.push([t('fCachePath'), (state.cache && state.cache.path ? state.cache.path : '/data/krakenmount/caches') + '/' + g.title_id, 'mono']);
   // The last crash of this title (crashes.json, the console's crash folder).
   // A Kraken source of an installed title is listed under it: the installed copy wins.
   if (installed) allGames().forEach(function (d) {
-    if (d.title_id === g.title_id && d.status === 'duplicate') rows.push([t('fAlsoFound'), d.path + ' ' + t('alsoFoundWhy'), 'mono']);
+    if (d.title_id === g.title_id && d.status === 'duplicate') rows.push([t('fAlsoFound'), d.path + ' ' + t('alsoFoundWhy'), 'wide']);
   });
-  if (g.crash) rows.splice(3, 0, [t('fCrash'), fmtTime(g.crash.at) + (g.crash.process ? ' (' + g.crash.process + ')' : '')]);
+  if (g.crash) rows.splice(dup ? 3 : 6, 0, [t('fCrash'), fmtTime(g.crash.at) + (g.crash.process ? ' (' + g.crash.process + ')' : '')]);
   var fields = $('m-fields'), sig = JSON.stringify(rows);
   if (fields._sig !== sig) {
     fields._sig = sig;
     fields.textContent = '';
     rows.forEach(function (row) {
-      fields.appendChild(el('dt', null, row[0]));
-      var dd = el('dd', row[2] === 'mono' ? 'mono' : null);
-      if (row[2] === 'tag') dd.appendChild(el('span', 'tag' + (g.status === 'ready' ? ' green' : ''), row[1]));
-      else setText(dd, row[1]);
-      fields.appendChild(dd);
+      var item = el('div', row[2] === 'wide' ? 'wide' : null);
+      item.appendChild(el('dt', null, row[0]));
+      var dd = el('dd', row[2] ? 'mono' : null);
+      setText(dd, row[1]);
+      item.appendChild(dd);
+      fields.appendChild(item);
     });
   }
   setText($('m-err'), modalActionError || g.error || (g.crash ? t('crashHint') : ''));
-  // Installed: uninstalled from the console menu only. FPKG: the last install's error.
+  // An FPKG: the last install's error.
   var res = g.kind === 'pkg' ? instResults()[g.path] : '', note = $('m-note');
-  var noteText = installed ? t(g.retail ? 'noteRetail' : 'noteFpkg') : instFailed(res) ? t('installFailed', { error: res }) : '';
+  var noteText = instFailed(res) ? t('installFailed', { error: res }) : '';
   note.hidden = !noteText;
-  note.className = 'm-note ' + (installed ? 'ok' : 'err');
+  note.className = 'm-note err';
   setText(note, noteText);
   var act = installAction(g), mi = $('m-install');
   mi.hidden = !act;
   if (act) setText(mi, act.text);
   mi.disabled = !!mi._busy;
   $('m-rebuild').hidden = $('m-hide').hidden = $('m-delete').hidden = installed;
-  // A duplicate shares the title id of the library copy: the API calls would act on that copy.
+  // A retail install starts only from its disc: no buttons, the disc card instead.
+  var retail = installed && !!g.retail, running = isRunning(g);
+  // While the game runs Play is Close game (a retail install shows only that button then).
+  $('m-btns').hidden = retail && !running;
+  $('m-report').hidden = retail;
+  setText($('m-play'), t(running ? 'closeGame' : 'play'));
+  $('m-disc').hidden = !retail;
+  // A duplicate: Delete and Hide send its path and act on that copy only (web.rs delete_duplicate);
+  // Rebuild is per title, so it rebuilds the cache the library copy uses.
   $('m-rebuild').disabled = rebuildLocked(g);
-  $('m-delete').disabled = g.status === 'duplicate';
-  $('m-hide').disabled = g.status === 'duplicate' || isRunning(g);
+  $('m-delete').disabled = isRunning(g);
+  $('m-hide').disabled = isRunning(g);
   $('m-report').disabled = g.status === 'duplicate';
   // Play: a ready title while no game runs; a started launch waits for the watcher to see the game.
-  $('m-play').disabled = g.status !== 'ready' || !!state.paused || Date.now() < ($('m-play')._until || 0);
+  $('m-play').disabled = Date.now() < ($('m-play')._until || 0) || (!running && (g.status !== 'ready' || !!state.paused));
   // The PlayGo switch: only for a game whose eboot imports PlayGo, or one turned off already.
   var pg = $('m-playgo');
   // Not with the overlay off: its fakelib/ stays empty, so the stub switch would do nothing.
-  $('m-playgo-row').hidden = !(g.playgo === true || g.playgo_off) || (g.kind !== 'pkg' && !!g.overlay_off);
+  // A retail copy (disc only): no switches at all.
+  $('m-playgo-row').hidden = retail || !(g.playgo === true || g.playgo_off) || (g.kind !== 'pkg' && !!g.overlay_off);
   if (!pg._busy) pg.checked = !g.playgo_off;
   pg.disabled = !!pg._busy || g.status === 'duplicate' || g.status === 'building';
-  // The overlay switch: folder and installed games (a pkg needs ampr-emu-ng's pkg mode).
+  // The ampr-emu-ng switch: installed games (ng_off is null on the others).
+  var ng = $('m-ng');
+  $('m-ng-row').hidden = retail || g.ng_off == null;
+  if (!ng._busy) ng.checked = !g.ng_off;
+  ng.disabled = !!ng._busy || g.status === 'duplicate' || g.status === 'building';
+  // The overlay switch: folder and installed games (a pkg needs ampr-emu-ng's pkg mode, also an
+  // installed debug FPKG run through ng: its path is the app.pkg).
   var ov = $('m-overlay');
-  $('m-overlay-row').hidden = g.kind !== 'folder' && !installed;
+  $('m-overlay-row').hidden = retail || (g.kind !== 'folder' && !installed) || /\/app\.pkg$/.test(g.path);
   if (!ov._busy) ov.checked = !g.overlay_off;
   ov.disabled = !!ov._busy || g.status === 'duplicate' || g.status === 'building';
 }
@@ -3761,6 +4280,8 @@ function renderSizes(sizes) {
   var total = 0;
   parts.forEach(function (part) { if (part[2] != null) total += Math.max(0, Number(part[2]) || 0); });
   parts.forEach(function (part) {
+    // Absent (a duplicate's answer has only game): not shown; null: unknown.
+    if (part[2] === undefined) return;
     if (part[2] == null) { legend.appendChild(el('span', 'c-' + part[0], t('szNa', { part: part[1] }))); return; }
     var amount = Math.max(0, Number(part[2]) || 0);
     var bar = el('i', 'c-' + part[0]);
@@ -3771,9 +4292,11 @@ function renderSizes(sizes) {
   });
   legend.appendChild(el('span', null, t('szTotal', { size: fmtSize(total) })));
 }
-async function loadSizes(tid, request) {
+// `path`: a duplicate's own size (POST with its path); else the title's sizes.
+async function loadSizes(tid, request, path) {
   try {
-    var r = await fetch('/api/sizes/' + encodeURIComponent(tid), { cache: 'no-store' });
+    var r = await fetch('/api/sizes/' + encodeURIComponent(tid),
+      path ? { method: 'POST', body: path, cache: 'no-store' } : { cache: 'no-store' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     var sizes = await r.json();
     if (request === sizesRequest && modalOpen()) renderSizes(sizes);
@@ -3796,8 +4319,9 @@ function openModal(id, fromCard) {
   renderModal();
   renderSizes(null);
   sizesRequest++;
-  if (findGame(id).status === 'duplicate') legendText('sizesDup');
-  else { legendText('sizesLoading'); loadSizes(findGame(id).title_id, sizesRequest); }
+  var g = findGame(id);
+  legendText('sizesLoading');
+  loadSizes(g.title_id, sizesRequest, g.status === 'duplicate' ? g.path : null);
   $('m-close').focus();
 }
 $('m-close').onclick = closeModal;
@@ -3836,7 +4360,7 @@ $('m-install').onclick = async function () {
 // is not pressed again; a duplicate shares the title id of the library copy, so the call would
 // act on that copy.
 function rebuildLocked(g) {
-  return !!g.rebuild_queued || ['duplicate', 'pending', 'checking', 'building'].indexOf(g.status) >= 0;
+  return !!g.rebuild_queued || ['pending', 'checking', 'building'].indexOf(g.status) >= 0;
 }
 $('m-rebuild').onclick = function () {
   var g = openTid && findGame(openTid);
@@ -3850,6 +4374,24 @@ $('m-rebuild').onclick = function () {
 $('m-play').onclick = async function () {
   var btn = this, g = openTid && findGame(openTid);
   if (!g) return;
+  if (isRunning(g)) {
+    ask(t('closeTitle', { name: gameName(g) }), t('closeText'), t('closeGame'), async function () {
+      // Until the launch watcher sees the exit (the next state drops it from running).
+      btn._until = Date.now() + 10000;
+      btn.disabled = true;
+      try {
+        var r = await fetch('/api/close/' + encodeURIComponent(g.title_id), { method: 'POST' });
+        if (!r.ok) throw new Error((await r.text()) || 'HTTP ' + r.status);
+        modalActionError = '';
+      } catch (e) {
+        btn._until = 0;
+        modalActionError = t('closeFailed', { error: e.message });
+      }
+      if (modalOpen()) renderModal();
+      schedule(300);
+    });
+    return;
+  }
   btn._until = Date.now() + 10000;
   btn.disabled = true;
   try {
@@ -3889,11 +4431,13 @@ async function postSwitch(box, route, field) {
 }
 $('m-playgo').onchange = function () { postSwitch(this, 'playgo', 'playgo_off'); };
 $('m-overlay').onchange = function () { postSwitch(this, 'overlay', 'overlay_off'); };
+$('m-ng').onchange = function () { postSwitch(this, 'ng', 'ng_off'); };
 $('m-delete').onclick = function () {
   var g = openTid && findGame(openTid);
   if (!g) return;
   var tid = g.title_id;
-  ask(t('deleteTitle', { name: gameName(g) }), t(g.kind === 'pkg' ? 'deletePkg' : 'deleteFolder', { path: g.path }),
+  var dup = g.status === 'duplicate';
+  ask(t('deleteTitle', { name: gameName(g) }), t(g.kind === 'pkg' ? (dup ? 'delDupPkg' : 'deletePkg') : (dup ? 'delDupFolder' : 'deleteFolder'), { path: g.path }),
     t('delete'), async function () {
       try {
         var r = await fetch('/api/delete/' + encodeURIComponent(tid), { method: 'POST', body: g.path });
@@ -4101,7 +4645,7 @@ function readSettings() {
 }
 // ---- UI settings and auto-save: every control posts on change, there is no Save button ----
 // POST /api/settings merges the keys it gets into config.toml: each save sends only what changed.
-var THEMES = ['dark', 'light'], SCHEMES = ['abyss', 'ember', 'moss'];
+var THEMES = ['dark', 'light'], SCHEMES = ['abyss', 'ember', 'moss', 'cobalt', 'dusk', 'rose', 'sand', 'volt', 'mono'];
 var uiNow = { ui_theme: 'dark', ui_scheme: 'abyss', ui_sidebar_collapsed: false };
 var cfg = null, saving = false, dirty = false, typeTimer = null, msgTimer = null;
 function each(sel, fn) { Array.prototype.forEach.call(document.querySelectorAll(sel), fn); }
@@ -4291,6 +4835,26 @@ async function loadSettings() {
       showMsg(function () { return t('loadFailed', { error: e.message }); }, 'err');
   }
 }
+// The QR code of the console's address (GET /api/qr), fetched each time Settings opens (the address
+// can change while the page stays open); one request at a time.
+var qrAsked = false;
+async function loadQr() {
+  if (qrAsked) return;
+  qrAsked = true;
+  try {
+    var r = await fetch('/api/qr', { cache: 'no-store' });
+    var v = r.ok ? await r.json() : null;
+    // No address (404): no card.
+    $('qrcard').hidden = !v;
+    if (v) {
+      $('qrimg').innerHTML = v.svg; // our own server's SVG
+      // Shown as ip:port; the code itself keeps http:// so a phone opens it.
+      setText($('qrurl'), String(v.url).replace(/^https?:\/\//, '').replace(/\/$/, ''));
+      $('qrcard').setAttribute('aria-label', v.url);
+    }
+  } catch (e) { /* offline: the card stays as it was */ }
+  qrAsked = false;
+}
 function setView(v) {
   var opening = v === 'settings' && $('settings').hidden;
   var tabs = document.querySelectorAll('.nav .seg-opt');
@@ -4299,7 +4863,7 @@ function setView(v) {
     tabs[i].setAttribute('aria-selected', String(on));
     $(tabs[i].getAttribute('aria-controls')).hidden = !on;
   }
-  if (opening) loadSettings();
+  if (opening) { loadSettings(); loadQr(); }
   else if (v === 'library') settingsRequest++;
   if (v === 'hiddengames') { live($('hdmsg'), null); loadHidden(); }
   if (v === 'install') loadInstall();

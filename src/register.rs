@@ -655,6 +655,50 @@ pub fn mount(title_id: &str, app0: &Path, backport: Option<&Path>) -> io::Result
     ctx(mount_inner(title_id, app0, backport, true), || format!("mount {title_id} ({})", app0.display()))
 }
 
+/// Takes our cache nullfs off the top of /system_ex/app/<TID> (an installed title run through ng), never
+/// MNT_FORCE and never a layer below it; Ok when ours is not on top (nothing of ours to take).
+pub fn drop_cache_layer(title_id: &str) -> io::Result<()> {
+    let dst = format!("{SYSTEM_EX_APP}/{title_id}");
+    let cache = crate::cache::dir(title_id);
+    match mount_source(&dst) {
+        Ok(Some(m)) if m.fstype == "nullfs" && Path::new(&m.from).starts_with(&cache) => {
+            ctx(crate::sys::unmount(&dst, 0), || format!("unmount {dst}"))
+        }
+        Ok(_) => Ok(()),
+        Err(e) if matches!(e.raw_os_error(), Some(libc::ENOENT | libc::ENOTDIR)) => Ok(()),
+        Err(e) => Err(e),
+    }
+}
+
+/// `mount` for an installed title run through ng (scan::installed_pkg): our cache nullfs at
+/// /system_ex/app/<TID>, the console's registration untouched. A layer of the system's there is never
+/// unmounted: ours goes on top of it (main's drop_old_mount takes ours off, top first, when ng is
+/// switched off). An unreadable statfs is refused.
+pub fn mount_over_install(title_id: &str, app0: &Path) -> io::Result<()> {
+    let dst = format!("{SYSTEM_EX_APP}/{title_id}");
+    let src = app0.to_str().ok_or_else(|| err(format!("non-UTF-8 path {}", app0.display())))?;
+    match mount_source(&dst) {
+        // Nothing mounted there (or no mount point yet): the usual mount (mkdir, /system_ex remount).
+        Ok(None) => mount(title_id, app0, None),
+        Err(e) if matches!(e.raw_os_error(), Some(libc::ENOENT | libc::ENOTDIR)) => mount(title_id, app0, None),
+        Err(e) => Err(err(format!("statfs {dst}: {e}; not mounted"))),
+        Ok(Some(m)) if m.fstype == "nullfs" && m.from_is(src) && same_inode(&dst, src) => Ok(()),
+        Ok(Some(m)) => {
+            // Ours on an old inode (a rebuilt cache): off first, never MNT_FORCE. Anything else stays below.
+            if m.fstype == "nullfs" && m.from_is(src) {
+                log!("{title_id}: {dst} is a stale nullfs of {}; unmounting it", m.from);
+                ctx(crate::sys::unmount(&dst, 0), || format!("unmount {dst}"))?;
+                if mount_source(&dst).ok().flatten().is_none() {
+                    return mount(title_id, app0, None);
+                }
+            }
+            ctx(crate::sys::nmount(&[("fstype", "nullfs"), ("from", src), ("fspath", &dst)], 0), || {
+                format!("nullfs {src} -> {dst} (over the system's layer)")
+            })
+        }
+    }
+}
+
 /// `mount` for a moved folder game: the whole stack is redone on the new `app0` even when the
 /// backport overlay on top is current (the nullfs under it still shows the old folder). Never
 /// MNT_FORCE: a running game's stack fails with EBUSY.

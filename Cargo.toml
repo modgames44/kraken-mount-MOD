@@ -1,6 +1,6 @@
 [package]
 name = "kraken-mount"
-version = "0.4.6"
+version = "0.4.7"
 edition = "2021"
 license = "GPL-3.0-or-later"
 
@@ -15,6 +15,8 @@ self-copy = []
 kraken-mount-pkg = { path = "crates/kraken-mount-pkg" }
 libc = "0.2.187"
 serde_json = "1"
+# GET /api/qr: the console's address for a phone (as ps5-dump-forge); no image/svg features (web.rs draws the SVG).
+qrcode = { version = "0.14", default-features = false }
 
 # Kraken decoding is hot during cache builds.
 [profile.release.package.kraken-mount-pkg]

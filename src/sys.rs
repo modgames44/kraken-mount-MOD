@@ -276,6 +276,7 @@ struct LaunchCtx {
 
 type LncLaunch = unsafe extern "C" fn(*const std::ffi::c_char, *const *const std::ffi::c_char, *mut LaunchCtx) -> i32;
 type LncInit = unsafe extern "C" fn() -> i32;
+type LncKill = unsafe extern "C" fn(u32) -> i32;
 
 extern "C" {
     fn sceUserServiceInitialize(params: *const std::ffi::c_void) -> i32;
@@ -308,20 +309,49 @@ fn system_service_fn(nid: &[u8]) -> Option<*mut std::ffi::c_void> {
 
 static LNC: std::sync::OnceLock<Option<LncLaunch>> = std::sync::OnceLock::new();
 
-/// Starts an installed title for the foreground user, as the home screen does. LncUtil first,
-/// then SystemService (CheatRunner's order: SystemService often refuses non-store titles).
-/// Ok once a launch is taken; the launch watcher sees the game start.
-pub fn launch_app(title_id: &str) -> Result<(), String> {
-    let tid = CString::new(title_id).map_err(|_| "bad title id".to_string())?;
+/// sceLncUtilLaunchApp, after one sceLncUtilInitialize per run (close_app needs it too).
+fn lnc_launch() -> Option<LncLaunch> {
     // f-Q8Nd33FBc = sceLncUtilInitialize, +nRJUD-7qCk = sceLncUtilLaunchApp.
-    let lnc = *LNC.get_or_init(|| {
+    *LNC.get_or_init(|| {
         unsafe { sceUserServiceInitialize(std::ptr::null()) };
         if let Some(init) = system_service_fn(b"f-Q8Nd33FBc\0") {
             let rc = unsafe { std::mem::transmute::<*mut std::ffi::c_void, LncInit>(init)() };
             crate::log!("sceLncUtilInitialize: {:#x}", rc as u32);
         }
         system_service_fn(b"+nRJUD-7qCk\0").map(|f| unsafe { std::mem::transmute::<*mut std::ffi::c_void, LncLaunch>(f) })
-    });
+    })
+}
+
+/// Closes the running game as the console's "Close game" does: sceLncUtilKillApp on its app id
+/// (sceKernelGetAppInfo of the game's pid, launch::game_app), then SIGKILL of the pid when LncUtil
+/// refuses. Ok once taken; the launch watcher sees the exit. (sceSystemServiceGetAppIdOfBigApp does not
+/// resolve by NID on the test console's firmware.)
+pub fn close_app(title_id: &str) -> Result<(), String> {
+    let (pid, app) = crate::launch::game_app(title_id).ok_or("the game's process is not found")?;
+    lnc_launch();
+    // SZ2uH5Abws8 = sceLncUtilKillApp.
+    if let Some(kill) = system_service_fn(b"SZ2uH5Abws8\0") {
+        let rc = unsafe { std::mem::transmute::<*mut std::ffi::c_void, LncKill>(kill)(app) };
+        crate::log!("{title_id}: sceLncUtilKillApp({app:#x}) pid={pid}: {:#x}", rc as u32);
+        if rc == 0 {
+            return Ok(());
+        }
+    }
+    if unsafe { libc::kill(pid, libc::SIGKILL) } != 0 {
+        let e = std::io::Error::last_os_error();
+        crate::log!("{title_id}: SIGKILL pid={pid}: {e}");
+        return Err(format!("close failed: {e}"));
+    }
+    crate::log!("{title_id}: SIGKILL pid={pid}");
+    Ok(())
+}
+
+/// Starts an installed title for the foreground user, as the home screen does. LncUtil first,
+/// then SystemService (CheatRunner's order: SystemService often refuses non-store titles).
+/// Ok once a launch is taken; the launch watcher sees the game start.
+pub fn launch_app(title_id: &str) -> Result<(), String> {
+    let tid = CString::new(title_id).map_err(|_| "bad title id".to_string())?;
+    let lnc = lnc_launch();
     let mut user = -1;
     let have_user = unsafe { sceUserServiceGetForegroundUser(&mut user) } == 0 && user != -1;
     let mut ctx = LaunchCtx { size: std::mem::size_of::<LaunchCtx>() as u32, user_id: user, app_opt: 0, crash_report: 0, check_flag: 0 };

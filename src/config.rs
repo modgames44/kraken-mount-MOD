@@ -10,8 +10,12 @@ pub struct Settings {
     /// Absolute paths whose sources (the path itself or anything under it) the scan skips.
     pub exclude: Vec<String>,
     pub inject_ampr: bool,
-    /// Installed games (Kind::Installed) get /data/krakenmount/ampr/* in their fakelib.
+    /// Installed games run through ampr-emu-ng: a debug FPKG install from its app.pkg (pkg mode),
+    /// a retail one with /data/krakenmount/ampr/* in its fakelib. Per title: `ng_installed`.
     pub ampr_installed: bool,
+    /// Title ids that override `ampr_installed` (on / off) for one installed game.
+    pub ampr_installed_on: Vec<String>,
+    pub ampr_installed_off: Vec<String>,
     /// Delete the source .pkg after the console reports its install done (install.rs).
     pub install_delete_source: bool,
     pub add_emulators: bool,
@@ -40,9 +44,22 @@ pub struct Settings {
 }
 
 pub const UI_THEMES: &[&str] = &["dark", "light"];
-pub const UI_SCHEMES: &[&str] = &["abyss", "ember", "moss"];
+pub const UI_SCHEMES: &[&str] = &["abyss", "ember", "moss", "cobalt", "dusk", "rose", "sand", "volt", "mono"];
 /// The LANGS table in ui.html.
 pub const UI_LANGS: &[&str] = &["en", "ru", "zh", "de", "es", "fr", "ja", "pt", "it", "ko", "ar"];
+
+impl Settings {
+    /// `ampr_installed` for one installed title: its override, else the global switch.
+    pub fn ng_installed(&self, tid: &str) -> bool {
+        if self.ampr_installed_on.iter().any(|t| t == tid) {
+            true
+        } else if self.ampr_installed_off.iter().any(|t| t == tid) {
+            false
+        } else {
+            self.ampr_installed
+        }
+    }
+}
 
 impl Default for Settings {
     fn default() -> Self {
@@ -51,6 +68,8 @@ impl Default for Settings {
             exclude: Vec::new(),
             inject_ampr: true,
             ampr_installed: false,
+            ampr_installed_on: Vec::new(),
+            ampr_installed_off: Vec::new(),
             install_delete_source: false,
             add_emulators: true,
             playgo_off: Vec::new(),
@@ -78,7 +97,9 @@ const HELP: &[(&str, &str)] = &[
     ("scanpath", "replaces the default scan roots (/data/homebrew, /data/etaHEN/games, <drive>/homebrew, ...)"),
     ("exclude", "absolute paths the scan skips: a source at one of them or under it is not listed or registered (a registered title stays registered)"),
     ("inject_ampr", "true = copy /data/krakenmount/ampr/* on top of a folder game's fakelib (pkg games always get it; a change only refreshes fakelib/)"),
-    ("ampr_installed", "true = copy /data/krakenmount/ampr/* on top of an installed game's fakelib (a change only refreshes fakelib/)"),
+    ("ampr_installed", "true = installed games run through ampr-emu-ng: a debug FPKG install starts from its app.pkg (pkg mode, rebuilds the cache), a retail one gets /data/krakenmount/ampr/* in its fakelib"),
+    ("ampr_installed_on", "title ids of installed games that run through ampr-emu-ng whatever ampr_installed says"),
+    ("ampr_installed_off", "title ids of installed games that run without ampr-emu-ng whatever ampr_installed says"),
     ("install_delete_source", "true = delete the source .pkg once the console reports its install done (Install tab)"),
     ("add_emulators", "true = add the bundled DLC (dlc_emu) and PlayGo (pgo_stub) emulators to a game's fakelib when it needs them and ships none (a change only refreshes fakelib/)"),
     ("playgo_off", "title ids that get no bundled PlayGo stub (pgo_stub): not added, not upgraded; a libScePlayGo.sprx the game ships stays (a change only refreshes fakelib/)"),
@@ -94,7 +115,7 @@ const HELP: &[(&str, &str)] = &[
     ("log", "true = write /data/krakenmount/kraken.log (starts over past 1 MiB)"),
     ("debug", "true = klog capture to /data/krakenmount/klog.txt and the /file/data/... route"),
     ("ui_theme", "web UI theme: \"dark\" or \"light\""),
-    ("ui_scheme", "web UI color scheme: \"abyss\", \"ember\" or \"moss\""),
+    ("ui_scheme", "web UI color scheme: \"abyss\", \"ember\", \"moss\", \"cobalt\", \"dusk\", \"rose\", \"sand\", \"volt\" or \"mono\""),
     ("ui_sidebar_collapsed", "true = the web UI sidebar shows icons only"),
     ("ui_lang", "web UI language: \"\" = the browser's, or en, ru, zh, de, es, fr, ja, pt, it, ko, ar"),
 ];
@@ -143,6 +164,13 @@ fn set(s: &mut Settings, key: &str, v: &str) -> Result<(), String> {
         "ampr_installed" => s.ampr_installed = flag(v)?,
         "install_delete_source" => s.install_delete_source = flag(v)?,
         "add_emulators" => s.add_emulators = flag(v)?,
+        "ampr_installed_on" | "ampr_installed_off" if crate::scan::valid_tid(v) => {
+            let list = if key == "ampr_installed_on" { &mut s.ampr_installed_on } else { &mut s.ampr_installed_off };
+            if !list.iter().any(|t| t == v) {
+                list.push(v.to_string());
+            }
+        }
+        "ampr_installed_on" | "ampr_installed_off" => return Err(format!("expected a title id like PPSA01556, got {v:?}")),
         "playgo_off" if crate::scan::valid_tid(v) => {
             if !s.playgo_off.iter().any(|t| t == v) {
                 s.playgo_off.push(v.to_string());
@@ -308,6 +336,10 @@ fn parse(text: &str) -> Settings {
                 s.playgo_off.clear(); // a later playgo_off line replaces an earlier one
             } else if k == "overlay_off" {
                 s.overlay_off.clear();
+            } else if k == "ampr_installed_on" {
+                s.ampr_installed_on.clear();
+            } else if k == "ampr_installed_off" {
+                s.ampr_installed_off.clear();
             } else if k == "exclude" {
                 s.exclude.clear();
             } else if vals.len() != 1 {
@@ -348,6 +380,11 @@ fn render(s: &Settings) -> String {
             }
             "inject_ampr" => out += &format!("{k} = {}\n", s.inject_ampr),
             "ampr_installed" => out += &format!("{k} = {}\n", s.ampr_installed),
+            "ampr_installed_on" | "ampr_installed_off" => {
+                let list = if k == "ampr_installed_on" { &s.ampr_installed_on } else { &s.ampr_installed_off };
+                let items: Vec<String> = list.iter().map(|t| toml_quote(t)).collect();
+                out += &format!("{k} = [{}]\n", items.join(", "));
+            }
             "install_delete_source" => out += &format!("{k} = {}\n", s.install_delete_source),
             "add_emulators" => out += &format!("{k} = {}\n", s.add_emulators),
             "playgo_off" => {
@@ -428,6 +465,8 @@ pub fn to_json(s: &Settings) -> Value {
         "exclude": s.exclude,
         "inject_ampr": s.inject_ampr,
         "ampr_installed": s.ampr_installed,
+        "ampr_installed_on": s.ampr_installed_on,
+        "ampr_installed_off": s.ampr_installed_off,
         "install_delete_source": s.install_delete_source,
         "add_emulators": s.add_emulators,
         "playgo_off": s.playgo_off,
@@ -455,8 +494,8 @@ pub fn from_json(v: &Value) -> Result<Settings, String> {
     let mut s = Settings::default();
     for (k, val) in obj {
         let vals: Vec<&Value> = match (k.as_str(), val) {
-            ("scanpath" | "exclude" | "playgo_off" | "overlay_off", Value::Array(a)) => a.iter().collect(),
-            ("scanpath" | "exclude" | "playgo_off" | "overlay_off", _) => return Err(format!("{k}: expected an array of strings")),
+            ("scanpath" | "exclude" | "playgo_off" | "overlay_off" | "ampr_installed_on" | "ampr_installed_off", Value::Array(a)) => a.iter().collect(),
+            ("scanpath" | "exclude" | "playgo_off" | "overlay_off" | "ampr_installed_on" | "ampr_installed_off", _) => return Err(format!("{k}: expected an array of strings")),
             _ => vec![val],
         };
         for x in vals {

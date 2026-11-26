@@ -12,7 +12,7 @@ below, whose terms require these notices to accompany binary distributions.
   and written into game caches: GPL-3.0 (Kraken Mount's license, text in LICENSE).
   Corresponding Source: https://github.com/drakmor/pgo_stub/tree/0.6
 - Rust crates linked into the payload (Cargo.lock), each used under its MIT option: itoa,
-  libc, memchr, serde_core, serde_json, zmij.
+  libc, memchr, qrcode, serde_core, serde_json, zmij.
 - The Rust 1.99.0 standard library (core, alloc, std), built with -Z build-std: MIT OR
   Apache-2.0, used under MIT. See https://github.com/rust-lang/rust/blob/1.99.0/COPYRIGHT.
 - Crates the standard library pulls in (library/Cargo.lock), each used under its MIT option:

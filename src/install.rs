@@ -429,6 +429,8 @@ pub fn init(state: Arc<State>) {
 /// Queues `item`; the job thread starts at the first call.
 pub fn enqueue(item: Item) -> Result<(), (u16, String)> {
     let (src, kind) = match item {
+        // An install run through ng: its source is the console's own app.pkg (installing it over itself).
+        Item::Game(src) if crate::scan::installed_pkg(&src) => return Err((409, "already installed".into())),
         Item::Game(src) if src.kind == Kind::Pkg => {
             let kind = if crate::installed::is_installed(&src.title_id) { "update" } else { "game" };
             (src, kind)

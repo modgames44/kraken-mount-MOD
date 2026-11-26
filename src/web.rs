@@ -116,7 +116,8 @@ impl State {
 /// `playgo_off`: the setting's title ids; None while add_emulators is off (no stub at all, so the
 /// UI shows no switch).
 fn game_json(g: &Game, playgo_off: Option<&[String]>, crash: Option<&crate::crash::Crash>) -> serde_json::Value {
-    let (kind, packing) = kind_json(g.src.kind);
+    // An install run through ng is still the console's install to the UI.
+    let (kind, packing) = if crate::scan::installed_pkg(&g.src) { ("installed", None) } else { kind_json(g.src.kind) };
     serde_json::json!({
         "title_id": g.src.title_id,
         "title_name": g.src.title_name,
@@ -222,8 +223,8 @@ fn ver_less(a: &str, b: &str) -> bool {
 }
 
 /// Delete, hide and uninstall refuse the console's own install (register::uninstall would remove it).
-fn installed_refusal(kind: Kind) -> Option<&'static str> {
-    (kind == Kind::Installed).then_some("an installed game: uninstall it from the console's menu")
+fn installed_refusal(src: &Source) -> Option<&'static str> {
+    (src.kind == Kind::Installed || crate::scan::installed_pkg(src)).then_some("an installed game: uninstall it from the console's menu")
 }
 
 /// Single instance: binds PORT, asking an older copy on it to quit first (POST /api/quit),
@@ -256,7 +257,7 @@ pub fn serve(state: Arc<State>, mut listener: TcpListener) {
             Ok((conn, _)) => {
                 let state = state.clone();
                 std::thread::spawn(move || {
-                    let _ = handle(&state, conn);
+                    let _ = handle(&state, conn, false);
                 });
             }
             Err(e) => {
@@ -269,6 +270,52 @@ pub fn serve(state: Arc<State>, mut listener: TcpListener) {
                 log!("web UI on port {PORT} again");
             }
         }
+    }
+}
+
+/// ShadowMount+'s default API port: clients that only know ShadowMount+ (Playden, RecompStore)
+/// on the console reach /api/v1 here (#126). Loopback only on purpose (SMP binds 0.0.0.0): ps5upload
+/// on a PC probes this port and would see both mounters running.
+pub const SMP_PORT: u16 = 10101;
+
+/// Whether a request on SMP_PORT is served: only /api/v1 (the UI, /pkg and the native API stay on PORT).
+fn smp_request(head: &str) -> bool {
+    head.split_whitespace().nth(1).is_some_and(|t| t.starts_with("/api/v1/"))
+}
+
+/// Serves /api/v1 on 127.0.0.1:SMP_PORT forever. The port is busy while ShadowMount+ still runs:
+/// binds every 2 s until it is free, and again after an accept error (rest mode, as serve).
+pub fn serve_smp(state: Arc<State>) {
+    let mut logged = false;
+    loop {
+        let listener = match TcpListener::bind(("127.0.0.1", SMP_PORT)) {
+            Ok(l) => l,
+            Err(e) => {
+                if !logged {
+                    logged = true;
+                    log!("web: ShadowMount+ API port {SMP_PORT} busy ({e}); retrying every 2 s");
+                }
+                std::thread::sleep(Duration::from_secs(2));
+                continue;
+            }
+        };
+        logged = false;
+        log!("ShadowMount+ API on 127.0.0.1:{SMP_PORT}");
+        loop {
+            match listener.accept() {
+                Ok((conn, _)) => {
+                    let state = state.clone();
+                    std::thread::spawn(move || {
+                        let _ = handle(&state, conn, true);
+                    });
+                }
+                Err(e) => {
+                    log!("web: accept on port {SMP_PORT} failed: {e}; binding it again");
+                    break;
+                }
+            }
+        }
+        std::thread::sleep(Duration::from_secs(1));
     }
 }
 
@@ -401,11 +448,13 @@ fn change_settings(state: &State, what: &str, f: impl FnOnce(&mut Settings) -> b
     Ok(true)
 }
 
-fn handle(state: &State, mut conn: TcpStream) -> std::io::Result<()> {
+/// One request; `smp`: it came in on SMP_PORT, which answers only /api/v1.
+fn handle(state: &State, mut conn: TcpStream, smp: bool) -> std::io::Result<()> {
     conn.set_read_timeout(Some(Duration::from_secs(5)))?;
     conn.set_write_timeout(Some(Duration::from_secs(10)))?;
     let loopback = conn.peer_addr().map(|a| a.ip().is_loopback()).unwrap_or(false);
     let r = match read_request(&mut conn)? {
+        Ok((head, _)) if smp && !smp_request(&head) => fail(404, libc::ENOENT, "unknown route").json(),
         // The installer fetching the package of the running install (install.rs).
         Ok((head, _)) if loopback && is_pkg_request(&head) => {
             crate::install::serve_conn(conn, &head);
@@ -497,6 +546,7 @@ fn route(state: &State, head: &str, body: &[u8], loopback: bool) -> Reply {
         ("GET", "/app-icon.png") => cached("image/png", APP_ICON),
         ("GET", "/api/state") => reply(200, "application/json", api_state(state)),
         ("GET", p) if p.starts_with("/api/sizes/") => sizes(state, &p["/api/sizes/".len()..]),
+        ("POST", p) if p.starts_with("/api/sizes/") => duplicate_size(state, &p["/api/sizes/".len()..], body),
         ("GET", p) if p.starts_with("/api/report/") => report(state, &p["/api/report/".len()..]),
         ("GET", "/api/hidden") => {
             let exclude = state.settings.lock().unwrap().exclude.clone();
@@ -570,15 +620,19 @@ fn route(state: &State, head: &str, body: &[u8], loopback: bool) -> Reply {
         }
         ("POST", p) if p.starts_with("/api/playgo/") => post_playgo(state, &p["/api/playgo/".len()..], body),
         ("POST", p) if p.starts_with("/api/overlay/") => post_overlay(state, &p["/api/overlay/".len()..], body),
+        ("POST", p) if p.starts_with("/api/ng/") => post_ng(state, &p["/api/ng/".len()..], body),
         ("POST", p) if p.starts_with("/api/v1/") => v1(state, &p["/api/v1/".len()..], body),
         ("POST", p) if p.starts_with("/api/rebuild/") => rebuild(state, &p["/api/rebuild/".len()..]),
         ("POST", p) if p.starts_with("/api/delete/") => delete(state, &p["/api/delete/".len()..], body),
         ("POST", p) if p.starts_with("/api/launch/") => launch(state, &p["/api/launch/".len()..]),
+        ("POST", p) if p.starts_with("/api/close/") => close(state, &p["/api/close/".len()..]),
+        ("GET", "/api/qr") => qr(head),
         ("POST", p) if p.starts_with("/api/hide/") => match uninstall_keep(state, &p["/api/hide/".len()..], Some(body)) {
             Ok(_) => no_content(),
             Err(f) => f.text(),
         },
         ("POST", "/api/unhide") => unhide(state, body),
+        ("POST", "/api/hidden/delete") => delete_hidden(state, body),
         ("POST", "/api/unhide-all") => unhide_all(state),
         ("POST", p) if p.starts_with("/api/backport/delete/") => match delete_backport(state, &p["/api/backport/delete/".len()..]) {
             Ok(()) => no_content(),
@@ -639,11 +693,17 @@ fn post_settings(state: &State, body: &[u8]) -> Reply {
     if v.get("playgo_off").is_none() {
         s.playgo_off.clone_from(&file.playgo_off);
     }
+    if v.get("ampr_installed_on").is_none() {
+        s.ampr_installed_on.clone_from(&file.ampr_installed_on);
+    }
+    if v.get("ampr_installed_off").is_none() {
+        s.ampr_installed_off.clone_from(&file.ampr_installed_off);
+    }
     let sent_overlay = v.get("overlay_off").is_some();
     if !sent_overlay {
         s.overlay_off.clone_from(&file.overlay_off);
     }
-    if let Some(t) = s.overlay_off.iter().filter(|_| sent_overlay).find(|t| state.source(t).is_some_and(|src| src.kind == Kind::Pkg)) {
+    if let Some(t) = s.overlay_off.iter().filter(|_| sent_overlay).find(|t| state.source(t).is_some_and(|src| src.kind == Kind::Pkg && !crate::scan::installed_pkg(&src))) {
         log!("settings rejected: {t}: overlay_off for a pkg game");
         return reply(409, "text/plain", format!("{t}: a pkg game needs its overlay"));
     }
@@ -694,6 +754,35 @@ fn post_playgo(state: &State, tid: &str, body: &[u8]) -> Reply {
     }
     log!("{tid}: PlayGo stub {}", if off { "off" } else { "on" });
     no_content()
+}
+
+/// POST /api/ng/<TID>, body `on` or `off`: ampr-emu-ng for one installed game. The value of the
+/// global `ampr_installed` clears the title's override (it follows the global switch again).
+fn post_ng(state: &State, tid: &str, body: &[u8]) -> Reply {
+    let Some(src) = Some(tid).filter(|t| crate::scan::valid_tid(t)).and_then(|t| state.source(t)) else {
+        return not_found();
+    };
+    let on = match body {
+        b"on" => true,
+        b"off" => false,
+        _ => return reply(400, "text/plain", "expected on or off"),
+    };
+    if src.kind != Kind::Installed && !crate::scan::installed_pkg(&src) {
+        return reply(409, "text/plain", "not an installed game");
+    }
+    let r = change_settings(state, &format!("{tid}: ampr-emu-ng"), |s| {
+        let differs = on != s.ampr_installed;
+        set_member(&mut s.ampr_installed_on, tid, on && differs) | set_member(&mut s.ampr_installed_off, tid, !on && differs)
+    });
+    match r {
+        Ok(changed) => {
+            if changed {
+                log!("{tid}: ampr-emu-ng {}", if on { "on" } else { "off" });
+            }
+            no_content()
+        }
+        Err(e) => reply(500, "text/plain", e.to_string()),
+    }
 }
 
 /// The fakelib overlay of one library title on (`off` false) or off (overlay_off). Off is refused
@@ -815,7 +904,10 @@ fn api_state(state: &State) -> Vec<u8> {
         let s = state.settings.lock().unwrap();
         s.add_emulators.then(|| s.playgo_off.clone())
     };
-    let overlay_off = state.settings.lock().unwrap().overlay_off.clone();
+    let (overlay_off, settings) = {
+        let s = state.settings.lock().unwrap();
+        (s.overlay_off.clone(), s.clone())
+    };
     let crashes = crate::crash::load();
     // A rebuild asked for but not started yet (the pass picks it up, or a game is running).
     let queued = state.forced.lock().unwrap().clone();
@@ -828,6 +920,9 @@ fn api_state(state: &State) -> Vec<u8> {
         // The title has an installed copy (that row itself, or a Kraken source it beat).
         let have = installed.get(g.src.title_id.as_str());
         v["installed"] = have.is_some().into();
+        // The game sheet's ampr-emu-ng switch: installed rows only (null on the others).
+        let installed_row = g.src.kind == Kind::Installed || crate::scan::installed_pkg(&g.src);
+        v["ng_off"] = installed_row.then(|| !settings.ng_installed(&g.src.title_id)).into();
         v["installed_version"] = have.map(|h| h.0).into();
         // Only the installed row: the Retail badge is the install's, not a .pkg's.
         v["retail"] = (g.src.kind == Kind::Installed && have.is_some_and(|h| h.1)).into();
@@ -919,9 +1014,10 @@ fn log_tail() -> Vec<u8> {
 /// The library's installed copies: title id -> (version, retail).
 /// ponytail: retail reads 8 bytes of each installed app.pkg on every call (/api/state polls it).
 fn installed_map(games: &[Game]) -> HashMap<&str, (&str, bool)> {
-    games.iter().filter(|g| g.src.kind == Kind::Installed && g.status != "duplicate").map(|g| {
+    games.iter().filter(|g| (g.src.kind == Kind::Installed || crate::scan::installed_pkg(&g.src)) && g.status != "duplicate").map(|g| {
         let mut head = [0u8; 8];
-        let retail = fs::File::open(g.src.path.join("app.pkg")).and_then(|mut f| f.read_exact(&mut head)).is_ok()
+        let pkg = if g.src.kind == Kind::Installed { g.src.path.join("app.pkg") } else { g.src.path.clone() };
+        let retail = fs::File::open(pkg).and_then(|mut f| f.read_exact(&mut head)).is_ok()
             && crate::installed::retail_header(&head);
         (g.src.title_id.as_str(), (g.src.version.as_str(), retail))
     }).collect()
@@ -1100,6 +1196,20 @@ fn rebuild(state: &State, tid: &str) -> Reply {
     no_content()
 }
 
+/// POST /api/sizes/<TID>, body = a duplicate row's path: `{game}` of that copy only (the .pkg's length,
+/// a folder's du); its DLC, saves and cache are the title's, shown on the library copy.
+fn duplicate_size(state: &State, tid: &str, body: &[u8]) -> Reply {
+    let Some(dup) = Some(tid).filter(|t| crate::scan::valid_tid(t)).and_then(|t| duplicate(state, t, body)) else {
+        return not_found();
+    };
+    let game = match dup.kind {
+        Kind::Folder(_) => cache::du(&dup.path),
+        Kind::Pkg => fs::metadata(&dup.path).map_or(dup.size, |m| m.len()),
+        Kind::Installed => dup.size,
+    };
+    reply(200, "application/json", serde_json::json!({ "game": game }).to_string())
+}
+
 fn sizes(state: &State, tid: &str) -> Reply {
     if !crate::scan::valid_tid(tid) {
         return not_found();
@@ -1217,6 +1327,71 @@ fn launch(state: &State, tid: &str) -> Reply {
     }
 }
 
+/// The console's LAN address: the source address of a UDP socket connected to a TEST-NET-1 host (a
+/// UDP connect sends nothing). None without a route.
+fn lan_ip() -> Option<std::net::Ipv4Addr> {
+    let s = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    s.connect("192.0.2.1:9").ok()?;
+    match s.local_addr().ok()?.ip() {
+        std::net::IpAddr::V4(ip) if !ip.is_loopback() && !ip.is_unspecified() => Some(ip),
+        _ => None,
+    }
+}
+
+/// The request's Host header when it names an IPv4 address other than loopback (a phone or PC opened
+/// the page by the console's address).
+fn host_ip(head: &str) -> Option<std::net::Ipv4Addr> {
+    let host = head.lines().find_map(|l| l.split_once(':').filter(|(k, _)| k.eq_ignore_ascii_case("host")).map(|(_, v)| v.trim()))?;
+    let ip: std::net::Ipv4Addr = host.split(':').next()?.parse().ok()?;
+    (!ip.is_loopback() && !ip.is_unspecified()).then_some(ip)
+}
+
+/// GET /api/qr: `{url, svg}`, `http://<LAN IP>:8097/` and its QR code (Settings, for a phone); the
+/// route's source address, else the request's Host (a LAN without a default gateway); 404 without either.
+/// shortcut: opened on the console itself (127.0.0.1) on a LAN without a gateway, no QR; getifaddrs
+/// would cover it if that setup matters.
+fn qr(head: &str) -> Reply {
+    let Some(ip) = lan_ip().or_else(|| host_ip(head)) else { return reply(404, "text/plain", "no address to show") };
+    let url = format!("http://{ip}:{PORT}/");
+    let code = match qrcode::QrCode::with_error_correction_level(url.as_bytes(), qrcode::EcLevel::L) {
+        Ok(c) => c,
+        Err(e) => return reply(500, "text/plain", format!("qr: {e}")),
+    };
+    // ps5-dump-forge qr_svg: a 2-module quiet zone, one path, scaled by CSS.
+    let (w, q) = (code.width(), 2);
+    let mut d = String::new();
+    for (i, c) in code.to_colors().iter().enumerate() {
+        if *c == qrcode::Color::Dark {
+            d += &format!("M{},{}h1v1h-1z", i % w + q, i / w + q);
+        }
+    }
+    let n = w + 2 * q;
+    let svg = format!(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {n} {n}\" shape-rendering=\"crispEdges\">\
+         <rect width=\"{n}\" height=\"{n}\" fill=\"#fff\"/><path fill=\"#000\" d=\"{d}\"/></svg>");
+    reply(200, "application/json", serde_json::json!({ "url": url, "svg": svg }).to_string())
+}
+
+/// POST /api/close/<TID>: closes the title while the launch watcher has it running (sys::close_app).
+fn close(state: &State, tid: &str) -> Reply {
+    if !crate::scan::valid_tid(tid) || state.source(tid).is_none() {
+        return not_found();
+    }
+    if !state.running.lock().unwrap().contains(tid) {
+        return reply(409, "text/plain", "the game is not running");
+    }
+    match sys::close_app(tid) {
+        Ok(()) => {
+            log!("{tid}: closed from the web UI");
+            no_content()
+        }
+        Err(e) => {
+            log!("{tid}: close: {e}");
+            reply(502, "text/plain", e)
+        }
+    }
+}
+
 /// The guards of delete and uninstall: `work` (the scan loop holds it while it scans, builds or
 /// registers; never wait a build out here), a library title, no game running, the title not building.
 fn lock_title<'a>(state: &'a State, tid: &str) -> Result<(std::sync::MutexGuard<'a, ()>, Source), Fail> {
@@ -1241,12 +1416,59 @@ fn check_title(state: &State, tid: &str) -> Result<Source, Fail> {
     Ok(src)
 }
 
+/// The duplicate row of `tid` whose source path is `path` (the bytes the UI sent).
+fn duplicate(state: &State, tid: &str, path: &[u8]) -> Option<Source> {
+    state.games.lock().unwrap().iter()
+        .find(|g| g.status == "duplicate" && g.src.title_id == tid && g.src.path.as_os_str().as_encoded_bytes() == path)
+        .map(|g| g.src.clone())
+}
+
+/// /api/delete of a duplicate: only its source goes (the checks of a library delete). The library
+/// copy's registration, mount and cache belong to the title and stay.
+fn delete_duplicate(state: &State, tid: &str, dup: &Source) -> Reply {
+    if let Some(msg) = installed_refusal(dup) {
+        return reply(409, "text/plain", msg);
+    }
+    let (current, queue, _) = crate::install::snapshot();
+    let id = dup.path.to_string_lossy();
+    if current.iter().chain(&queue).any(|j| j.id == id) {
+        log!("{tid}: delete refused: duplicate {} is queued or installing", dup.path.display());
+        return reply(409, "text/plain", "the package is queued or installing; cancel it first");
+    }
+    let roots = {
+        let settings = state.settings.lock().unwrap();
+        if settings.scan_paths.is_empty() { storage::default_scan_roots() } else { settings.scan_paths.clone() }
+    };
+    if let Err(reason) = safe_delete_source(dup, &roots) {
+        log!("{tid}: delete rejected: duplicate {}: {reason}", dup.path.display());
+        return reply(409, "text/plain", reason);
+    }
+    let result = match dup.kind {
+        Kind::Pkg => fs::remove_file(&dup.path),
+        Kind::Folder(_) => fs::remove_dir_all(&dup.path),
+        Kind::Installed => return reply(409, "text/plain", "an installed game is not deleted here"),
+    };
+    if let Err(e) = result {
+        // ponytail: a folder remove_dir_all that failed midway leaves a partial duplicate.
+        log!("{tid}: delete duplicate {}: {e}", dup.path.display());
+        state.wake();
+        return reply(500, "text/plain", e.to_string());
+    }
+    log!("{tid}: deleted the duplicate {}", dup.path.display());
+    state.games.lock().unwrap().retain(|g| g.src.path != dup.path);
+    state.wake();
+    no_content()
+}
+
 fn delete(state: &State, tid: &str, body: &[u8]) -> Reply {
     let (_work, src) = match lock_title(state, tid) {
         Ok(x) => x,
         Err(f) => return f.text(),
     };
-    if let Some(msg) = installed_refusal(src.kind) {
+    if let Some(dup) = duplicate(state, tid, body).filter(|d| d.path != src.path) {
+        return delete_duplicate(state, tid, &dup);
+    }
+    if let Some(msg) = installed_refusal(&src) {
         log!("{tid}: delete refused: {} is the console's install", src.path.display());
         return reply(409, "text/plain", msg);
     }
@@ -1331,7 +1553,21 @@ fn manual(state: &State, b: &Obj, exclude: bool) -> Result<serde_json::Value, Fa
 fn uninstall_keep(state: &State, tid: &str, expect: Option<&[u8]>) -> Result<serde_json::Value, Fail> {
     let (_work, src) = lock_title(state, tid)?;
     let path = src.path.to_string_lossy().into_owned();
-    if let Some(msg) = installed_refusal(src.kind) {
+    // /api/hide of a duplicate: only its path joins `exclude`; the library copy stays registered.
+    if let Some(dup) = expect.and_then(|b| duplicate(state, tid, b)).filter(|d| d.path != src.path) {
+        // An installed copy ignores `exclude` (scan claims installs first): nothing to hide.
+        if let Some(msg) = installed_refusal(&dup) {
+            return Err(fail(409, libc::EPERM, msg));
+        }
+        let Some(entry) = exclude_entry(&dup.path.to_string_lossy()) else {
+            return Err(fail(409, libc::EINVAL, "the source path is not absolute"));
+        };
+        change_settings(state, &format!("{tid}: exclude {entry}"), |s| set_member(&mut s.exclude, &entry, true)).map_err(save_fail)?;
+        state.games.lock().unwrap().retain(|g| g.src.path != dup.path);
+        log!("{tid}: hid the duplicate {}", dup.path.display());
+        return Ok(serde_json::json!({}));
+    }
+    if let Some(msg) = installed_refusal(&src) {
         log!("{tid}: uninstall refused: {path} is the console's install");
         return Err(fail(409, libc::EPERM, msg));
     }
@@ -1402,6 +1638,76 @@ fn uninstall_keep(state: &State, tid: &str, expect: Option<&[u8]>) -> Result<ser
     state.wake();
     log!("{tid}: uninstalled from the web API, {path} kept and excluded");
     Ok(serde_json::json!({}))
+}
+
+/// POST /api/hidden/delete, body = an `exclude` path that is a readable game (scan::read_source): its
+/// source is deleted (the checks of a library delete: `work` free, its title not running, not queued
+/// or installing, `safe_delete_source`), then the path leaves `exclude`. The title's cache stays (Purge).
+fn delete_hidden(state: &State, body: &[u8]) -> Reply {
+    let Ok(path) = std::str::from_utf8(body) else { return reply(400, "text/plain", "path: expected UTF-8") };
+    if !state.settings.lock().unwrap().exclude.iter().any(|e| e == path) {
+        return reply(404, "text/plain", "not hidden");
+    }
+    let Some(src) = crate::scan::read_source(Path::new(path)) else {
+        return reply(409, "text/plain", "not a game Kraken Mount can read");
+    };
+    let Ok(_work) = state.work.try_lock() else {
+        return reply(409, "text/plain", "a scan or build is in progress; try again in a moment");
+    };
+    let tid = src.title_id.clone();
+    // As check_title: paused covers a game that is starting, before the watcher lists it as running.
+    if state.paused() || state.running.lock().unwrap().contains(&tid) {
+        return reply(409, "text/plain", "a game is running");
+    }
+    let (current, queue, _) = crate::install::snapshot();
+    if current.iter().chain(&queue).any(|j| j.id == path) {
+        return reply(409, "text/plain", "the package is queued or installing; cancel it first");
+    }
+    let roots = {
+        let settings = state.settings.lock().unwrap();
+        if settings.scan_paths.is_empty() { storage::default_scan_roots() } else { settings.scan_paths.clone() }
+    };
+    if let Err(reason) = safe_delete_source(&src, &roots) {
+        log!("{tid}: delete rejected: hidden {path}: {reason}");
+        return reply(409, "text/plain", reason);
+    }
+    // A source hidden by hand (manual/remove, config) stays registered: as /api/delete, its home-screen
+    // entry goes too when this path is the registered source and the registration is ours.
+    let registered = cache::stamp_source(&tid).as_deref() == Some(path) && register::is_ours(&tid).is_ok();
+    if registered {
+        if let Err(e) = register::unmount_title(&tid) {
+            log!("{tid}: delete hidden {path}: unmount: {e}");
+            return reply(409, "text/plain", e.to_string());
+        }
+    }
+    let result = match src.kind {
+        Kind::Pkg => fs::remove_file(path),
+        Kind::Folder(_) => fs::remove_dir_all(path),
+        Kind::Installed => return reply(409, "text/plain", "an installed game is not deleted here"),
+    };
+    if let Err(e) = result {
+        // ponytail: a folder remove_dir_all that failed midway leaves a partial source (still hidden).
+        log!("{tid}: delete hidden {path}: {e}");
+        // Still registered: mounted again (an excluded source is not remounted by the scan). shortcut: no backport layer.
+        if registered {
+            if let Err(m) = register::mount(&tid, &cache::app0(&src), None) {
+                log!("{tid}: delete hidden {path}: remount: {m}");
+            }
+        }
+        return reply(500, "text/plain", e.to_string());
+    }
+    log!("{tid}: deleted the hidden {path}");
+    if registered {
+        if let Err(e) = register::uninstall(&tid) {
+            log!("{tid}: uninstall after deleting the hidden {path}: {e}");
+        }
+        register::forget(&tid);
+        state.titles.lock().unwrap().remove(&tid);
+    }
+    if let Err(e) = change_settings(state, &format!("{tid}: unexclude {path}"), |s| set_member(&mut s.exclude, path, false)) {
+        return reply(500, "text/plain", format!("deleted; still listed as hidden: {e}"));
+    }
+    no_content()
 }
 
 /// POST /api/unhide, body = an `exclude` path: as /api/v1/manual/add; 404 when it was not excluded.
@@ -1584,7 +1890,7 @@ fn v1_games(state: &State) -> serde_json::Value {
     let list: Vec<_> = games.iter().zip(presence(&games)).map(|(g, [registered, mounted, present])| {
         let path = g.src.path.to_string_lossy();
         let folder = matches!(g.src.kind, Kind::Folder(_));
-        let installed = g.src.kind == Kind::Installed;
+        let installed = g.src.kind == Kind::Installed || crate::scan::installed_pkg(&g.src);
         serde_json::json!({
             "title_id": g.src.title_id,
             "name": g.src.title_name,
