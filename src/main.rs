@@ -8,6 +8,7 @@
 #[macro_use]
 mod sys;
 mod i18n;
+mod image;
 mod install;
 mod installed;
 mod ampr_index;
@@ -52,6 +53,7 @@ fn inputs_key(src: &Source, s: &Settings) -> String {
     k += &format!("|playgo_off={}", s.playgo_off.contains(&src.title_id));
     k += &format!("|overlay_off={}", s.overlay_off.contains(&src.title_id));
     k += &format!("|ng={}", s.ng_installed(&src.title_id));
+    k += &format!("|ampr_off={}", s.ampr_off.contains(&src.title_id));
     for p in cache::inputs(src, s) {
         let mtime = std::fs::metadata(&p).and_then(|m| m.modified()).ok();
         k += &format!("|{}={mtime:?}", p.display());
@@ -189,10 +191,22 @@ fn process(
     staged: &mut Vec<Source>,
 ) {
     let tid = &src.title_id;
+    // A homebrew running while the pass goes on (State::game_running): its cache, app0 and mount
+    // stay as they are; a queued rebuild waits for its exit.
+    if state.running.lock().unwrap().contains(tid) {
+        return;
+    }
     let forced = state.forced.lock().unwrap().remove(tid);
     if src.kind != Kind::Installed {
         // Kraken may mount it now: a later install of it gets its stack checked again.
         NO_OLD_MOUNT.lock().unwrap().retain(|t| t != tid);
+    }
+    // Uninstalled outside Kraken Mount since this run registered it (a launcher's own remover, or
+    // the home screen's Delete): its staged files are gone, so it registers in full again.
+    // ponytail: two stats per title per pass; a deleted app.db row with the files left is not seen.
+    if src.kind != Kind::Installed && registered.contains(tid) && !register::staged(tid) {
+        log!("{tid}: no longer on the home screen; registering again");
+        registered.remove(tid);
     }
     let mut fresh = cache::check(src, s);
     if let (false, Fresh::Moved(from)) = (forced, &fresh) {
@@ -877,7 +891,7 @@ fn auto_remove(state: &State, s: &Settings, r: &scan::ScanResult, timers: &mut M
     let keys: HashSet<String> = missing.keys().cloned().collect();
     for tid in timers.due(&keys, now, s.auto_remove_delay_secs) {
         // A game may have started since `running` was read: stop, the next full pass retries.
-        if state.paused() {
+        if state.game_running() {
             return;
         }
         let source = &missing[&tid];
@@ -983,9 +997,10 @@ fn main() {
     let (mut timers, mut full_pass, t0) = (MissingTimers::default(), false, std::time::Instant::now());
     loop {
         // A game runs: nothing that could touch its app0 or /system_ex mount. Rescan, rebuild
-        // and purge requests stay queued (forced / purge) for after it exits.
+        // and purge requests stay queued (forced / purge) for after it exits. A running homebrew
+        // does not pause the loop (game_running); process() skips its title, purge waits.
         // ponytail: polls every 2 s instead of a wake from the watcher.
-        if state.paused() {
+        if state.game_running() {
             state.busy.store(false, Ordering::SeqCst);
             std::thread::sleep(Duration::from_secs(2));
             continue;
@@ -1012,7 +1027,7 @@ fn main() {
         let roots = if s.scan_paths.is_empty() { storage::default_scan_roots() } else { s.scan_paths.clone() };
         let r = scan::scan(&roots, &s.exclude, s.backports, s.stability_wait_secs, install::busy_tid().as_deref(), &|t| s.ng_installed(t));
         let scan_ms = pass.elapsed().as_millis();
-        if state.paused() {
+        if state.game_running() {
             continue;
         }
         // Purge after the scan, so `keep` is this scan's library and every kept title rebuilds below.
@@ -1023,7 +1038,8 @@ fn main() {
             if !PURGE_WAIT_LOGGED.swap(true, Ordering::SeqCst) {
                 log!("purge waits: {} source(s) still being copied", r.unstable.len());
             }
-        } else if state.purge.swap(false, Ordering::SeqCst) {
+        } else if !state.paused() && state.purge.swap(false, Ordering::SeqCst) {
+            // paused, not game_running: purge() would empty a running homebrew's mounted cache too.
             PURGE_WAIT_LOGGED.store(false, Ordering::SeqCst);
             let keep: Vec<String> = r.games.iter().map(|g| g.title_id.clone()).collect();
             match cache::purge(&keep) {
@@ -1033,6 +1049,19 @@ fn main() {
             state.forced.lock().unwrap().extend(keep);
         }
         publish(&state, &r);
+        // Image mounts no source of this scan uses (image deleted, moved or unplugged) are released
+        // before the games are processed, so a moved image's title sees its old folder gone (Moved).
+        // A scan error on a path inside a mount (an image found inside an image) keeps that mount too.
+        // A .ffpfsc game keeps both its container mount (image) and its inner mount (path).
+        let keep: HashSet<PathBuf> = r.games.iter().chain(&r.duplicates)
+            .flat_map(|g| [g.image.as_deref().map(image::mount_point), image::mount_of(&g.path)])
+            .flatten()
+            .chain(r.unstable.iter().map(|(p, _)| p.as_path()).filter(|p| image::is_image(p)).map(image::mount_point))
+            .chain(r.errors.iter().filter_map(|(p, _)| image::mount_of(p)))
+            .collect();
+        // A running homebrew (the loop goes on for it) may run from an image: release_unused leaves its mounts.
+        let running: Vec<String> = state.running.lock().unwrap().iter().cloned().collect();
+        image::release_unused(&keep, &running);
         // A source that left the scan (USB unplugged) goes through register::mount again when back.
         // A source still being copied stays registered (skipped this pass, not gone).
         registered.retain(|t| r.games.iter().any(|g| &g.title_id == t)
@@ -1044,14 +1073,14 @@ fn main() {
         check_space(&state, &s);
         let (mut full, mut staged) = (true, Vec::new());
         for src in &r.games {
-            if state.paused() {
+            if state.game_running() {
                 log!("a game started; scan paused until it exits");
                 full = false;
                 break;
             }
             // Excluded since this pass loaded the settings (/api/v1/manual/remove, uninstall).
             // ponytail: a title staged before the change is still installed by install_staged below.
-            if scan::excluded(&src.path, &state.settings.lock().unwrap().exclude) {
+            if scan::excluded(src.origin(), &state.settings.lock().unwrap().exclude) {
                 continue;
             }
             process(&state, &s, src, &mut registered, &mut failed, &mut staged);
@@ -1060,11 +1089,11 @@ fn main() {
         // not in `registered`, so the pass after the game exits stages them again and installs them.
         // ponytail: a title already on the home screen (a rebuild) is only remounted then; its
         // app.db row keeps the old version and name until its next full register.
-        if !state.paused() {
+        if !state.game_running() {
             install_staged(&state, &s, &mut staged, &mut registered, &mut failed);
             register::sync_snd0info_if_changed(&registered);
         }
-        if full_pass && full && !state.paused() {
+        if full_pass && full && !state.game_running() {
             auto_remove(&state, &s, &r, &mut timers, t0.elapsed().as_secs());
         }
         full_pass |= full;

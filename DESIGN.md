@@ -18,11 +18,80 @@ only into a cache's `fakelib/`, never into `/data/krakenmount/ampr/`.
   Sparse layout extents (holes: a kind-0x40 boundary up to the next boundary) are read as zeros.
 - **Folder**: a directory directly in a scan root with `eboot.bin` and `sce_sys/param.json`.
   Packing: `ampr_zstd.index` present = zstd, else `ampr_assets.index` = lz4, else plain.
+- **Image**: a `.exfat` (exfatfs), `.ffpkg` (UFS), `.ffpfs` (PFS) or `.ffpfsc` (PFS container holding
+  one more image) file, any case, directly in a scan root (or one folder below, as the others), as made by
+  SMP's tools. Read first without attaching it (`image::probe`, see Images), then mounted read-only; the game
+  folder is the image root when it has `eboot.bin` + `sce_sys/param.json`, else the first such folder directly
+  inside it (sorted). From then on it is a
+  **Folder** source (`Source.path` = that folder in the mount, `Source.image` = the image file,
+  `Source.size` = the image size, `drive` = the image's drive).
 - Any drive. The cache is always on the internal SSD.
 - **Installed**: a game installed on the console (`/user/app/<TID>` or `/mnt/ext{0,1}/user/app/<TID>`, see
   Installed games). Never registered by Kraken Mount; it keeps a fakelib-only cache for the launch overlay. With
   `ampr_installed` (per title) an internal debug FPKG install is a pkg source instead: built from its `app.pkg` and
   only mounted at `/system_ex/app/<TID>` (see Flow). An FPKG game, or a patch/DLC `.pkg` in a scan root, can be installed from the web UI (Install).
+
+## Images (`src/image.rs`, port of SMP `sm_image.c` / `sm_mount_device.c`, LVD backend only)
+- Profile (SMP `get_image_mount_profile` and helpers): *nested* = a `.ffpfsc` container or a PFS image
+  inside one; *legacy* = nested, or the image is not under `/data` or `/user`.
+  | | LVD type | sector | secondary unit | attach flags | nmount flags |
+  |---|---|---|---|---|---|
+  | `.exfat` | 5, legacy 0 | 512 | 0x10000 | 0x1c | RDONLY |
+  | `.ffpkg` | 5, legacy 7 | 4096 | 0x10000, legacy = sector | 0x1c, legacy 0x1e | RDONLY, legacy +NOATIME |
+  | `.ffpfs` | 5 | 4096 | 0x10000, legacy = sector | 0x1c | RDONLY |
+  | `.ffpfsc` (outer) | 9 (AcO) | 4096 | sector | 0x1c | RDONLY |
+  | PFS inside `.ffpfsc` | 8 (AcI) | 4096 | sector | 0x1c | RDONLY |
+
+  A non-nested image takes the backing filesystem's block size (statfs `f_bsize`, else `f_iosize`) as sector
+  when smaller than the default. Attach: `/dev/lvdctl` ioctl `0xC0286D00` (V0, one file layer, no bitmap);
+  wait up to 10 s for `/dev/lvdN`.
+- nmount options (SMP's, without `errmsg`/`force`): ufs `budgetid=game,async,noatime,automounted`;
+  exfatfs `budgetid=game,large=yes,timezone=static,async,noatime,ignoreacl,automounted`; pfs (both PFS
+  formats) `sigverify=0,mkeymode=AC,budgetid=game,playgo=0,disc=0,ekpfs=<64 zeros>,async,noatime,automounted`.
+  Mount point `/mnt/krakenmount/[pfsc_]<stem>_<fnv1a32(image path)>` (stem: 27 ASCII alnum/`-`/`_` at
+  most; `pfsc_` for a `.ffpfsc`), verified by statfs (mounted from `/dev/lvdN`). Any failure detaches the unit.
+- Probe (`src/image/probe.rs`, before any attach): ps5-dump-forge's readers open the image file itself:
+  `ps5-dump-forge-pfs` for `.ffpfs` (`PfsSource`) and `.ffpfsc` (`open_ffpfsc`: exactly one image in the
+  container's root, `.exfat`/`.ffpkg`/`.ufs2`/`.ffpfs` or `pfs_image.dat`), `ps5upload-fpkg` for `.exfat`
+  (`exfat::ExFatSource`) and `.ffpkg` (`ufs2_source::Ufs2Source`). From the file list: the game folder (root
+  first, else the first folder directly inside, sorted, with `eboot.bin` + `sce_sys/param.json`) and that
+  folder's `param.json` (at most `MAX_PARAM_BYTES`). One probe per (path, size, mtime), errors included: an
+  image is walked again only when it changes. A probe or `param.json` error is a scan error of the image file;
+  it is never attached.
+- `.ffpfsc`: the container is mounted, then the inner image the probe named, in that mount (`pfs_image.dat`
+  or a name without a known extension is PFS, `.ufs2` is UFS). The game folder is in that inner mount.
+- After the mount, the probe's game folder must hold `eboot.bin` + `sce_sys/param.json`; else (the reader
+  and the filesystem disagree) the image's mounts are released and it is a scan error.
+- `/data/krakenmount/images/<mount name>` = `<unit>\n<image path>`: a later copy of the payload reuses a
+  live mount of the same image; a dead one (drive unplugged) or someone else's at that path is released
+  and mounted again.
+- Scan: an image still being written (stability) is neither probed nor attached; its title id is that of a
+  cache whose stamp source is in its mount point.
+- Release (`image::release_unused`, every pass after the scan, before the games are processed; a mount under a
+  running title's `/system_ex/app/<TID>` stack, or holding such an inner image, stays: a running homebrew's title
+  is never touched): every
+  mount of ours not used by a game (its image mount and the mount of its folder), duplicate, unstable image
+  or scan error of this pass, nor holding such a mount, is released by `image::release_tree`: the images
+  mounted from inside it first, then the `/system_ex/app/<TID>` stacks on it (`register::unmount_title`,
+  never MNT_FORCE), then unmount (never MNT_FORCE), LVD detach (`0xC0286D01`), state file and dir removed.
+  The unit detached is the live mount's `/dev/lvdN`, or the recorded one for a dead mount (still in the mount
+  table, so attached this boot). Nothing mounted there: the record may predate a reboot (its unit now another
+  image's or the system's), so it is dropped without a detach.
+  Busy = logged, retried next pass. So a moved image's cache sees its old folder gone and relinks (`Fresh::Moved`).
+- Eject: the image mounts whose image is on the drive are released (`release_tree`) before the IPMI eject.
+- `/app0` of an image game is read-only (writes fail with EROFS), as in SMP's default `read_only`.
+  `fix_access` skips the image tree (chmod cannot succeed there). Web: `"image"` in a game's JSON, the
+  badge is the image's extension (`EXFAT`, `FFPKG`, `FFPFS`, `FFPFSC`), its pills start on the card's second
+  row. The library's Images chip (before Duplicates) lists the image games (every chip but All shows only
+  while it has games); the other kind chips leave them out. The game sheet's Path, Hide and Delete name the image file.
+  A gameless or unreadable image is a scan error (log only). The game size in `/api/sizes` is the image size.
+- Hide, `games/uninstall` and `/api/delete` go by `Source::origin` (the image file, not its mount folder):
+  `exclude` gets the image path; Delete releases its mounts (`release_tree`, busy = 500, the file stays),
+  then deletes the file.
+- ponytail: no MD backend, no per-image sector override, no PFS GDDR5 metadata-cache ioctl (SMP's
+  `nested_pfs_index_cache`, off by default there too), one game per `.ffpfsc`, a unit whose detach failed is
+  not retried once its mount is gone, and an image replaced in place while mounted keeps serving
+  the old file until it is released (unplug, move, or a payload restart after a reboot).
 
 ## Paths
 | Path | What |
@@ -91,6 +160,7 @@ A flat TOML subset: `key = value` with strings, `true`/`false`, integers and arr
 | `add_emulators` | true | add the bundled DLC (dlc_emu) and PlayGo (pgo_stub) emulators to a game's fakelib when it needs them and ships none (a change only refreshes `fakelib/`) |
 | `playgo_off` | [] | array of title ids (`playgo_off = ["PPSA01556"]`) that get no bundled PlayGo stub: pgo_stub is neither added nor upgraded, a `libScePlayGo.sprx` the game or backport ships stays as shipped; the dlc_emu set is unaffected. Per game from the UI (`POST /api/playgo/<TID>`); a change only refreshes `fakelib/` |
 | `overlay_off` | [] | array of title ids whose cache gets an empty `fakelib/`, so launch mounts no overlay: not the game's or backport's fakelib, not ampr-emu-ng, not the emulators; like any empty `fakelib/`, the launch watcher then mounts nothing in its sandbox (no `/data`, USB or writable `/app0` either): the title runs as registered; an installed title's backport redirects into `/app0` still apply (see Launch). Folder and installed games only: a Kraken-mounted pkg needs ampr-emu-ng's pkg mode, so the web refuses it for a pkg (409) and a pkg source of a listed title keeps its fakelib. Per game from `POST /api/overlay/<TID>` or `/api/v1/games/fakelib`; a change only refreshes `fakelib/` |
+| `ampr_off` | [] | array of title ids of plain folder games that get no ampr-emu-ng even with `inject_ampr` (a game that dies right after the ampr-emu-ng notice); unlike `overlay_off`, the game's own `fakelib/` and the emulators stay. zstd and LZ4 folders (their packs need ampr-emu-ng) and pkg games always get it, listed or not (`Settings::ng_folder`). Per game from the game sheet's ampr-emu-ng switch (`POST /api/ng/<TID>`); a change only refreshes `fakelib/` |
 | `ampr_auto_update` | true | once per start, download a newer ampr-emu-ng release from GitHub (a hand-placed `libSceAmpr.sprx` is kept) |
 | `backports` | true | apply `<scan root>/backports/<TID>*` |
 | `scan_interval_seconds` | 10 | scan loop period (1..3600) |
@@ -181,7 +251,7 @@ until the manifest changes). Toasts follow the console language, not `ui_lang`.
   A folder title in `overlay_off` stops right after `fakelib/` is emptied (no base, no emulators, no ampr), logged
   `<TID>: fakelib: overlay off (overlay_off)`; `.ampr` is written with `"overlay_off": true` and the earlier
   "playgo" memo kept. Launch then mounts no overlay (empty `fakelib/`).
-  Then, with `inject_ampr` (folder), with `ampr_installed` (installed) and always for a pkg game (the package's own `libSceAmpr.sprx` cannot read the
+  Then, with `inject_ampr` (folder; a plain one not for a title in `ampr_off`), with `ampr_installed` (installed) and always for a pkg game (the package's own `libSceAmpr.sprx` cannot read the
   `.pkg` named in `kraken.image`), every file of `/data/krakenmount/ampr/` (not `libkernel.sprx`) is copied on top,
   so ours wins over the game's own `libSceAmpr.sprx`, except a game's or backport's ampr-emu-ng strictly newer than
   ours (the `ampr-emu-ng X.Y.Z` identity in both files; ours without one counts as older), which is kept and logged
@@ -256,7 +326,11 @@ redoes the missing app0 nullfs (gone after a reboot); for such a pkg the scan re
 the cache's `sce_sys/param.json` and opens the .pkg only for its memoized class (`pkg_class`, once per run per
 size+mtime). A fresh title registered by this run still
 gets `register::mount` every scan (a no-op when app0 is mounted there; redoes it after a USB replug);
-a title that leaves the scan is forgotten, so it goes through the full path when it is back.
+a title that leaves the scan is forgotten, so it goes through the full path when it is back. So is a title
+uninstalled outside Kraken Mount (another tool's `sceAppInstUtilAppUnInstall`, the home screen's Delete): each pass
+checks `register::staged` (two stats: `/user/app/<TID>/sce_sys/param.json`, `/user/appmeta/<TID>/param.json`) for a
+title in the registered set, logs `<TID>: no longer on the home screen; registering again` when either is gone and
+takes it out of the set. ponytail: an app.db row deleted with both files left is not seen.
 A moved game (`Fresh::Moved`, not forced): a folder's `/system_ex/app/<TID>` stack is redone on the
 new folder first (`register::remount`, backport unionfs included, never MNT_FORCE), then
 `cache::relink`; logged with the title id and both paths, toast `i18n::moved`; then the usual
@@ -303,6 +377,12 @@ Self-update (`src/update.rs`): always on, no setting, once per start, on its own
 Running game: while `launch::watch` reports a live session (`running`), the loop does no
 scan/build/register/purge (a game starting mid-scan stops the scan before the next title);
 rescan/rebuild/purge requests stay queued and run after the game exits (2 s poll).
+A running homebrew (`scan::homebrew`: a valid title id not `CUSA*`/`PPSA*`, as SMP 1.7beta6) does not pause the loop
+(`State::game_running` = `running` minus homebrew; `State::paused` stays any session): a launcher like Playden gets its
+new games on the home screen while it runs. Its own title is skipped by `process` (no check, build, register or
+remount; a forced rebuild waits), purge waits for `paused` (it would empty the mounted cache), and everything else
+gated on `paused` (self-update, `/api/quit`, the install queue, web delete/hide/uninstall/eject, `/api/state` `paused`)
+still waits. ponytail: the UI banner says paused while such a pass runs.
 Toasts: `sceNotificationSend` system toast (dump-forge/SMP JSON, icon `/user/data/krakenmount/notify-icon.png`),
 the old `sceKernelSendNotificationRequest` only as fallback. Toast texts (`src/i18n.rs`) follow the console language
 (`sceSystemServiceParamGetInt` lang, read per toast; dump-forge's 11: en ru zh de es fr ja pt it ko ar), English when it
@@ -600,6 +680,7 @@ pub fn still_written(paths: &[std::path::PathBuf], wait: u64) -> Option<u64>; //
 pub fn read_source(path: &std::path::Path) -> Option<Source>; // one path read as the scan does (pkg memo), backport None; None = not a readable game or a patch/DLC .pkg (the hidden list)
 pub fn parse_param(json: &[u8]) -> std::io::Result<(String, String, String)>; // (title_id, title_name, version); name: see below
 pub fn valid_tid(t: &str) -> bool;
+pub fn homebrew(t: &str) -> bool;                          // valid_tid and not CUSA/PPSA: running, it does not pause the scan loop
 
 // cache.rs
 pub const CACHES: &str = "/data/krakenmount/caches";
@@ -630,6 +711,7 @@ pub fn register(title_id: &str, app0: &std::path::Path, sce_sys: &std::path::Pat
 pub fn register_tile(port: u16);
 pub fn tile_staged() -> bool;                             // FW 12+: the tile waits for the pass's install_all
 pub fn is_registered(title_id: &str) -> bool;
+pub fn staged(title_id: &str) -> bool;                     // both staged param.json files exist (two stats; is_registered's first check)
 pub fn registered(tids: &[&str]) -> Vec<bool>;            // is_registered for many, in tids order, one app.db read (all false when unreadable)
 pub fn set_snd0info(title_id: &str);                      // app.db snd0info -> /user/appmeta/<TID>/snd0.at9; logs, never fails
 pub fn spawn_snd0info(title_id: &str, delay_ms: u64);    // set_snd0info on its own thread after delay_ms
@@ -728,16 +810,17 @@ answers, and two copies would scan at once. The install fails and its marker mea
   mounted: bool (`/system_ex/app/<TID>` is a mount point, one mount table per request), source_present: bool (the source path exists),
   overlay_off: bool (listed in `overlay_off` and a folder or installed source),
   installed: bool (the title has an installed copy: on the installed row and on the sources it beat), installed_version: that copy's version|null,
-  ng_off: bool|null (installed rows only: `!ng_installed`, the game sheet's ampr-emu-ng switch; an installed row run through ng reports `kind: "installed"`, its `path` is the `app.pkg`),
+  ng_off: bool|null (the game sheet's ampr-emu-ng switch: on installed rows `!ng_installed` (an installed row run through ng reports `kind: "installed"`, its `path` is the `app.pkg`); on plain folders, while `inject_ampr` is on, `!ng_folder` (listed in `ampr_off`); null on the others),
+  image: the `.exfat`/`.ffpkg`/`.ffpfs`/`.ffpfsc` file of an image game|null,
   retail: bool (only on the installed row of a retail install; 8 bytes of its app.pkg read per poll, ponytail)}],
 
   drives:[{mount, label, kind, total, free, ejectable}], cache:{path, size, free, low_space, ampr_present}, log:[last 100 lines of the last 64 KiB]}`
 - `GET /api/report/<TID>` -> plain text for an issue: Kraken Mount version, a firmware line to fill in,
-  the game (name, title id, version, source, kind, drive, status and error), ampr-emu-ng (`/api/ampr`
+  the game (name, title id, version, source, kind, drive, status and error; the image file of an image game), ampr-emu-ng (`/api/ampr`
   kind and version), the PlayGo stub (on, off, or not added), the last crash, and the last 40 lines of
   the log tail (64 KiB) that contain the title id; 404 for an invalid or absent library title.
   The game sheet's Report button opens it.
-- `GET /api/hidden` -> `[{path, title_id, title_name, version, kind, packing, drive, size}]`, one per `exclude` entry, read by `scan::read_source` on request (the UI asks when the Hidden tab opens and after hide/unhide, never per poll); all but `path` null when it is not a readable game.
+- `GET /api/hidden` -> `[{path, title_id, title_name, version, kind, packing, image, drive, size}]`, one per `exclude` entry, read by `scan::read_source` on request (the UI asks when the Hidden tab opens and after hide/unhide, never per poll); all but `path` null when it is not a readable game.
 - `GET /api/settings` -> settings JSON; `POST /api/settings` (JSON body, any subset of the keys) -> merged
   over the current `config.toml` (a missing key keeps the file's value, lists not sent stay verbatim; the UI
   sends only changed keys), save,
@@ -749,8 +832,10 @@ answers, and two copies would scan at once. The install fails and its marker mea
   title, 400 for any other body.
 - `POST /api/ng/<TID>`, body exactly `on` or `off` -> ampr-emu-ng for one installed game (`Kind::Installed` or
   `scan::installed_pkg`): the title leaves both `ampr_installed_on`/`_off`, then joins the one of its body when that
-  differs from `ampr_installed`; as `/api/playgo` (`change_settings`), logs `<TID>: ampr-emu-ng on|off` when it
-  changed, 204; 404 for an invalid or absent library title, 400 for any other body, 409 for a non-installed title.
+  differs from `ampr_installed`. For a plain folder game: `off` adds the title to `ampr_off`, `on` removes it; 409
+  while `inject_ampr` is off. As `/api/playgo` (`change_settings`), logs `<TID>: ampr-emu-ng on|off` when it
+  changed, 204; 404 for an invalid or absent library title, 400 for any other body, 409 for any other title
+  (pkg, zstd or LZ4 folder).
 - `POST /api/overlay/<TID>`, body exactly `on` or `off` -> removes the title from / adds it to `overlay_off`,
   as `/api/playgo` (shared `change_settings`), logs `<TID>: overlay on|off`, 204; 404 for an invalid or absent
   library title, 400 for any other body (for a library title), 409 for `off` on a pkg game, 500 when the save fails.
@@ -793,14 +878,14 @@ answers, and two copies would scan at once. The install fails and its marker mea
   queued or installing; cancel it first`, as `/api/install/delete-source`; ponytail: a job queued after the check
   fails at its start on the missing file); 500 on source or cache deletion failure. It validates the
   source is inside a scan root with no symlink from the root down (links above the root are not checked), is not under any `.../user/app/` (an installed copy's
-  files), and is a .pkg file or game directory, then unmounts `/system_ex/app/<TID>` without force and deletes the source. If that
+  files), and is a .pkg file, game directory or (image game) image file, then unmounts `/system_ex/app/<TID>` without force and deletes the source (an image: its mounts released first). If that
   fails, the cache and tile stay and the next pass remounts the title (a folder partly removed stays so).
   Then it uninstalls the home-screen entry (failure logged), removes the title from the launch set
   and its game row, wakes the scan loop, deletes the cache, and logs and optionally notifies.
   A body that is the path of a `duplicate` row of the title (`delete_duplicate`, after `lock_title`): only that source
   is deleted (the queued/installing check, `installed_refusal` and `safe_delete_source` as above), the row dropped,
   204; the library copy's registration, mount and cache stay (they belong to the title), no toast.
-- `POST /api/hide/<TID>`, body: the source path the UI showed (empty = any) -> `games/uninstall` below
+- `POST /api/hide/<TID>`, body: the game's `path` (an image game's mount folder; empty = any) -> `games/uninstall` below
   (`uninstall_keep`: off the home screen, source and its duplicates added to `exclude`), 204; also 409 when the
   body is not the current library source. A title never staged (no `/user/app/<TID>/sce_sys/param.json`, e.g.
   its first build failed) is only excluded: no uninstall. Errors as plain text with the same HTTP codes.
@@ -808,7 +893,9 @@ answers, and two copies would scan at once. The install fails and its marker mea
   (`change_settings`, scan woken), the row dropped, 204; the library copy stays registered. The Library's
   Duplicates chip (shown while the state lists a `duplicate`; All and the kind chips list them too) lists only these
   rows; their game sheets have Rebuild (per title, so the library copy's cache), Hide and Delete.
-- `POST /api/hidden/delete`, body: an `exclude` path that `scan::read_source` reads as a game -> its source deleted
+- `POST /api/hidden/delete`, body: an `exclude` path that `scan::read_source` reads as a game (an image file through
+  `image::probe`, not mounted) -> its source deleted (an image: `remove_image`, its mounts released first; its
+  registered source is a game folder in its mount, `image::holds`)
   (the guards of `/api/delete`: `State::work` try-lock, its title not running, not queued or installing,
   `safe_delete_source`), then the path leaves `exclude`, 204; 404 when not excluded, 409 for an unreadable path or a
   guard, 500 when the delete or the save fails. When the path is the title's registered source (`cache::stamp_source`) and the registration is ours (`register::is_ours`; a source hidden by hand stays registered), the title is unmounted first (409 when busy) and uninstalled + forgotten after the delete, as `/api/delete`; a failed delete mounts it again (without a backport layer; the scan does not remount an excluded source). The title's cache stays (Purge). The Hidden screen's Delete.
@@ -839,11 +926,16 @@ answers, and two copies would scan at once. The install fails and its marker mea
   else `{status: <FreeBSD errno>, error}` with HTTP 400 (EINVAL), 404 (ENOENT; also an unknown route), 409
   (EBUSY, EPERM, EINVAL), 500 (a config save error's errno) or 501 (ENOTSUP). Routes (SMP meaning -> Kraken Mount):
   - `version` -> `{status, api_version: 1, kraken_mount_version, capabilities: ["list_games", "add_manual_source",
-    "remove_manual_source", "uninstall_game", "rescan", "fakelib"]}`.
-  - `games` -> `{status, count, games: [{title_id, name, version, path, runtime_path (folder: path; pkg: ""),
+    "remove_manual_source", "uninstall_game", "rescan", "fakelib", "fakelib_unlisted", "reregister_missing", "game_info"]}`. A client
+    checks a capability, not the version: `fakelib_unlisted` = `games/fakelib` takes a title not in the library yet;
+    `reregister_missing` = a title uninstalled outside Kraken Mount registers again at the next pass, with no restart.
+  - `games` -> `{status, count, games: [{title_id, name, version, path, runtime_path (folder: path; pkg: ""; an image game: `path` is the image file, `runtime_path` its mount folder),
     source_type: "folder"|"pkg"|"installed", managed: true (installed: false), installed (= registered), mounted, source_available (= source_present),
     status (the Kraken status), error ("" when none), fakelib_mode: "full"|"disabled" (overlay_off, folder and installed sources only)}]}`; library
     titles only (no `duplicate` rows); the three flags as in `/api/state`.
+  - `games/info {title_id}` -> that title's `games` entry at the top level, its `status` being the API's 0 (as SMP
+    answers it; SMP's size, patch and DLC fields are not sent); 404 ENOENT when the title is not in the library.
+    RecompStore's installer polls it for its own tile until `installed` is true.
   - `manual/remove {path}` -> adds `path` to `exclude` (Kraken Mount sees every folder in its scan roots, so
     removing a manual source means not seeing it); `manual/add {path}` -> takes it off `exclude`. `path` must be an
     absolute string without control characters (400 EINVAL), stored as config.rs does (trailing `/` trimmed). Idempotent:
@@ -860,8 +952,12 @@ answers, and two copies would scan at once. The install fails and its marker mea
     ponytail: a non-UTF-8 source path is excluded by its lossy text, which then matches nothing.
   - `games/fakelib {title_id, mode}` (`disabled` = overlay off; `full` or `default` = on; `emulators` 501 ENOTSUP;
     other 400 EINVAL) or `{title_id, ignore_global_fakelib: bool}` (true = off; `mode` wins when both) -> as
-    `/api/overlay` (`set_overlay`: absent title 404 ENOENT, off for a pkg 409 EPERM) ->
-    `{status, fakelib_mode, saved: true, applies_on_next_launch: true}`.
+    `/api/overlay` (`set_overlay`: invalid title id 404 ENOENT, off for a pkg of the library 409 EPERM) ->
+    `{status, fakelib_mode, saved: true, applies_on_next_launch: true, listed}`. A valid title id not in the library
+    (`listed: false`) is still put in or taken off `overlay_off` and saved: a launcher sets it before its title folder
+    is first scanned (scans wait while the launcher runs), so the first build already makes an empty `fakelib/`
+    (`inputs_key` holds `overlay_off`). ponytail: such a title that turns out to be a pkg keeps its overlay
+    (`cache::overlay_off` ignores pkg sources). `/api/overlay` stays 404 for a title not in the library.
 - `GET /api/install` -> `{current: Job|null, queue: [id], results: [[id, text]], installable: [row], kept: [row]}`
   (see Install). Job = `{id, title_id, name, kind: "game"|"update"|"patch"|"dlc", done_bytes, total_bytes,
   phase: "wait"|"download"|"install", error}` (`error` is always null, reserved: a job's error is in `results`); `results` = the last result per source path: `done`, `cancelled` or
